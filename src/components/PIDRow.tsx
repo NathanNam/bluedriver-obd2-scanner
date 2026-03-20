@@ -1,11 +1,9 @@
 // ============================================================
-// PIDRow — row in PID picker modal
+// PIDRow — row in PID picker list
 // ============================================================
 
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { PIDDefinition, ParsedPID } from '../types';
-import { spacing, fontSize, borderRadius } from '../utils/theme';
 import { useThemeColors } from '../utils/hooks';
 
 interface Props {
@@ -20,70 +18,78 @@ export function PIDRow({ definition, currentValue, isSelected, isUnsupported, on
   const theme = useThemeColors();
 
   return (
-    <TouchableOpacity
-      style={[
-        styles.row,
-        {
-          backgroundColor: isSelected ? theme.primary + '15' : theme.surface,
-          borderColor: isSelected ? theme.primary : theme.border,
-          opacity: isUnsupported ? 0.4 : 1,
-        },
-      ]}
-      onPress={onSelect}
+    <button
+      onClick={onSelect}
       disabled={isUnsupported}
-      activeOpacity={0.7}
+      style={{
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        border: `1px solid ${isSelected ? theme.primary : theme.border}`,
+        borderRadius: 6,
+        marginBottom: 4,
+        backgroundColor: isSelected ? theme.primary + '15' : theme.surface,
+        opacity: isUnsupported ? 0.4 : 1,
+        cursor: isUnsupported ? 'default' : 'pointer',
+        width: '100%',
+        textAlign: 'left',
+        outline: 'none',
+        fontFamily: 'inherit',
+      }}
     >
-      <View style={styles.info}>
-        <Text style={[styles.name, { color: theme.text }]}>{definition.name}</Text>
-        <Text style={[styles.detail, { color: theme.textSecondary }]}>
-          PID 0x{definition.pid} | {definition.min}–{definition.max} {definition.unit}
-        </Text>
-      </View>
-      <View style={styles.valueContainer}>
+      {/* Info */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span
+          style={{
+            fontSize: 15,
+            fontWeight: 500,
+            color: theme.text,
+            display: 'block',
+          }}
+        >
+          {definition.name}
+        </span>
+        <span
+          style={{
+            fontSize: 11,
+            marginTop: 2,
+            color: theme.textSecondary,
+            display: 'block',
+          }}
+        >
+          PID 0x{definition.pid} | {definition.min}&ndash;{definition.max} {definition.unit}
+        </span>
+      </div>
+
+      {/* Value */}
+      <div style={{ textAlign: 'right', minWidth: 80, flexShrink: 0 }}>
         {currentValue ? (
-          <Text style={[styles.liveValue, { color: theme.primary }]}>
+          <span
+            style={{
+              fontSize: 15,
+              fontWeight: 600,
+              color: theme.primary,
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
             {Math.round(currentValue.value)} {definition.unit}
-          </Text>
+          </span>
         ) : isUnsupported ? (
-          <Text style={[styles.unsupported, { color: theme.textTertiary }]}>N/A</Text>
+          <span style={{ fontSize: 13, color: theme.textTertiary }}>N/A</span>
         ) : (
-          <Text style={[styles.liveValue, { color: theme.textTertiary }]}>--</Text>
+          <span
+            style={{
+              fontSize: 15,
+              fontWeight: 600,
+              color: theme.textTertiary,
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            --
+          </span>
         )}
-      </View>
-    </TouchableOpacity>
+      </div>
+    </button>
   );
 }
-
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.md,
-    borderWidth: 1,
-    borderRadius: borderRadius.sm,
-    marginBottom: spacing.xs,
-  },
-  info: {
-    flex: 1,
-  },
-  name: {
-    fontSize: fontSize.md,
-    fontWeight: '500',
-  },
-  detail: {
-    fontSize: fontSize.xs,
-    marginTop: 2,
-  },
-  valueContainer: {
-    alignItems: 'flex-end',
-    minWidth: 80,
-  },
-  liveValue: {
-    fontSize: fontSize.md,
-    fontWeight: '600',
-    fontVariant: ['tabular-nums'],
-  },
-  unsupported: {
-    fontSize: fontSize.sm,
-  },
-});

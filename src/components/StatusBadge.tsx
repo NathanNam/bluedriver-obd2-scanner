@@ -1,10 +1,8 @@
 // ============================================================
-// StatusBadge — colored label for connection state, severity, etc.
+// StatusBadge — colored pill badge for status labels
 // ============================================================
 
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { borderRadius, fontSize, spacing } from '../utils/theme';
 
 interface Props {
   label: string;
@@ -17,30 +15,23 @@ export function StatusBadge({ label, color, textColor = '#FFFFFF', size = 'mediu
   const isSmall = size === 'small';
 
   return (
-    <View style={[styles.badge, { backgroundColor: color }, isSmall && styles.badgeSmall]}>
-      <Text style={[styles.text, { color: textColor }, isSmall && styles.textSmall]}>
-        {label}
-      </Text>
-    </View>
+    <span
+      style={{
+        display: 'inline-block',
+        backgroundColor: color,
+        borderRadius: isSmall ? 4 : 6,
+        paddingLeft: isSmall ? 6 : 8,
+        paddingRight: isSmall ? 6 : 8,
+        paddingTop: isSmall ? 2 : 4,
+        paddingBottom: isSmall ? 2 : 4,
+        color: textColor,
+        fontSize: isSmall ? 11 : 13,
+        fontWeight: 600,
+        lineHeight: 1.2,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {label}
+    </span>
   );
 }
-
-const styles = StyleSheet.create({
-  badge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.sm,
-    alignSelf: 'flex-start',
-  },
-  badgeSmall: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  text: {
-    fontSize: fontSize.sm,
-    fontWeight: '600',
-  },
-  textSmall: {
-    fontSize: fontSize.xs,
-  },
-});

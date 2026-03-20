@@ -1,6 +1,6 @@
 # BlueDriver OBD2 Scanner
 
-A React Native mobile app that connects to a vehicle's OBD2 port via the BlueDriver Pro Bluetooth adapter. Read diagnostic trouble codes in plain English, monitor real-time engine data on configurable gauges, and export scan reports — all without a subscription.
+A web app that connects to your vehicle's OBD2 port via a BlueDriver Pro or ELM327 Bluetooth adapter — directly from your browser using the Web Bluetooth API. Read diagnostic trouble codes in plain English, monitor real-time engine data on configurable gauges, and export scan reports.
 
 <p align="center">
   <img src="docs/screenshot-home.png" alt="Home screen — connected to BlueDriver Pro" width="300" />
@@ -14,7 +14,7 @@ A React Native mobile app that connects to a vehicle's OBD2 port via the BlueDri
 - Stored, pending, and permanent DTCs with plain-English descriptions and severity badges
 - Freeze frame data captured at time of fault
 - Clear fault codes (with confirmation and re-scan)
-- Export scan reports via share sheet
+- Export scan reports via share or clipboard
 
 **Live Scan**
 - Real-time streaming of 13 PIDs: RPM, speed, coolant temp, throttle, engine load, IAT, MAP, timing advance, fuel level, oil temp, STFT, LTFT, MAF
@@ -24,20 +24,19 @@ A React Native mobile app that connects to a vehicle's OBD2 port via the BlueDri
 - Session recording with playback and CSV export
 
 **General**
-- Full dark mode support
+- Full dark mode support (follows system preference or manual toggle)
 - Imperial / metric unit switching
 - Scan and recording history
-- Works completely offline
-- Demo mode for UI testing without hardware
+- Works completely offline after initial load
+- Built-in demo mode for testing without hardware
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 18+
-- iOS 16+ or Android 10+ device
-- [Expo Go](https://expo.dev/go) installed on your device (for demo mode)
+- **Chrome or Edge** browser (Web Bluetooth is not supported in Safari or Firefox)
 - BlueDriver Pro or compatible ELM327 BLE adapter (for real Bluetooth)
+- Node.js 18+ (for development)
 
 ### Install & Run
 
@@ -45,46 +44,46 @@ A React Native mobile app that connects to a vehicle's OBD2 port via the BlueDri
 git clone https://github.com/NathanNam/bluedriver-obd2-scanner.git
 cd bluedriver-obd2-scanner
 npm install
-npx expo start
+npm run dev
 ```
 
-Open Expo Go on your phone and scan the QR code from within the app to load the project.
+Open http://localhost:5173 in Chrome. The app starts in **demo mode** with simulated OBD2 data — no adapter needed.
 
-### Demo Mode vs Real BLE
+### Demo Mode vs Real Bluetooth
 
-The app ships in **demo mode** by default so it runs in Expo Go without native Bluetooth modules. Demo mode simulates device discovery, connection, DTC responses, and live PID data with realistic oscillating values.
+The app defaults to **demo mode**, which simulates device discovery, connection, DTC responses, and live PID data with realistic oscillating values.
 
-To enable real Bluetooth:
+To connect to a real adapter:
 
-1. Install the BLE library: `npm install react-native-ble-plx`
-2. Set `USE_REAL_BLE = true` in `src/bluetooth/manager.ts`
-3. Build with native modules: `npx expo run:ios` or `npx expo run:android`
+1. Open the app in Chrome (Web Bluetooth requires HTTPS or localhost)
+2. The app auto-detects Web Bluetooth support and offers a "Use Real Bluetooth" toggle
+3. Click "Scan for Devices" — Chrome shows its native Bluetooth device picker
+4. Select your BlueDriver or ELM327 adapter
+5. The app initializes the ELM327 and you're ready to scan
 
-> Expo Go does not support native BLE modules. A [development build](https://docs.expo.dev/develop/development-builds/introduction/) is required for real adapter connectivity.
+> Web Bluetooth requires Chrome or Edge. Safari and Firefox do not support it.
 
 ## Tech Stack
 
 | Layer | Choice |
 |---|---|
-| Framework | React Native (Expo SDK 54) |
+| Framework | React 18 + Vite |
 | Language | TypeScript |
-| BLE | `react-native-ble-plx` (optional, for dev builds) |
+| Bluetooth | Web Bluetooth API |
 | OBD2 Protocol | ELM327 AT commands over BLE |
 | State | Zustand |
-| Gauges / Charts | `react-native-svg` |
-| Navigation | React Navigation v6 (stack + bottom tabs) |
-| Storage | AsyncStorage |
+| Gauges / Charts | Inline SVG |
+| Styling | Inline styles with theme system |
 
 ## Project Structure
 
 ```
 src/
-├── bluetooth/          # BLE connection manager, demo simulator
+├── bluetooth/          # Web Bluetooth manager + demo simulator
 ├── obd2/               # ELM327 commands, PID registry, response parser
 ├── screens/            # Home, Scan, Live, History, ScanDetail, RecordingDetail, Settings
 ├── components/         # Gauge, DTCCard, StatusBadge, PIDRow, ConnectionStatusBar
 ├── store/              # Zustand stores: bluetooth, scan, live, settings
-├── navigation/         # Tab + stack navigator config
 ├── types/              # TypeScript type definitions
 └── utils/
     ├── dtc/            # DTC lookup table (~200 codes)
@@ -110,16 +109,14 @@ On connect: `ATZ` (reset) → `ATE0` (echo off) → `ATL0` (linefeeds off) → `
 
 PIDs are polled sequentially — the ELM327 is single-threaded and cannot handle concurrent requests. Unsupported PIDs are auto-excluded after a `NO DATA` response. `BUS BUSY` errors retry up to 3 times with 200ms delay.
 
-## Platform Permissions
+## Browser Compatibility
 
-### iOS (`Info.plist`)
-- `NSBluetoothAlwaysUsageDescription`
-- `NSBluetoothPeripheralUsageDescription`
-
-### Android (`AndroidManifest.xml`)
-- `BLUETOOTH`, `BLUETOOTH_ADMIN`
-- `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT` (API 31+)
-- `ACCESS_FINE_LOCATION` (required for BLE scan on Android < 12)
+| Browser | Web Bluetooth | Status |
+|---|---|---|
+| Chrome (desktop & Android) | Yes | Fully supported |
+| Edge | Yes | Fully supported |
+| Safari | No | Demo mode only |
+| Firefox | No | Demo mode only |
 
 ## License
 

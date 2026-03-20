@@ -1,12 +1,9 @@
 // ============================================================
-// Gauge — circular arc gauge with animated needle (SVG)
+// Gauge — SVG circular arc gauge for live PID data
 // ============================================================
 
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, TouchableOpacity } from 'react-native';
-import Svg, { Path, Circle } from 'react-native-svg';
+import React from 'react';
 import { PIDDefinition } from '../types';
-import { borderRadius, fontSize, spacing } from '../utils/theme';
 import { useThemeColors } from '../utils/hooks';
 
 interface Props {
@@ -18,29 +15,19 @@ interface Props {
 
 export function Gauge({ value, definition, size = 140, onPress }: Props) {
   const theme = useThemeColors();
-  const animatedValue = useRef(new Animated.Value(0)).current;
 
   const displayValue = value ?? 0;
   const range = definition.max - definition.min;
   const normalized = Math.max(0, Math.min(1, (displayValue - definition.min) / range));
 
-  useEffect(() => {
-    Animated.timing(animatedValue, {
-      toValue: normalized,
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
-  }, [normalized]);
-
   // Arc geometry
   const centerX = size / 2;
   const centerY = size / 2;
   const radius = size / 2 - 12;
-  const startAngle = 135; // degrees
-  const endAngle = 405; // degrees (270 degree arc)
+  const startAngle = 135;
+  const endAngle = 405;
   const arcSweep = endAngle - startAngle;
 
-  // Convert angle to radians and get point
   const angleToPoint = (angle: number) => {
     const rad = (angle * Math.PI) / 180;
     return {
@@ -49,7 +36,6 @@ export function Gauge({ value, definition, size = 140, onPress }: Props) {
     };
   };
 
-  // Build arc path
   const buildArc = (startDeg: number, endDeg: number) => {
     const start = angleToPoint(startDeg);
     const end = angleToPoint(endDeg);
@@ -60,7 +46,7 @@ export function Gauge({ value, definition, size = 140, onPress }: Props) {
   // Determine color based on thresholds
   const getValueColor = () => {
     if (value === null) return theme.textTertiary;
-    // For fuel tank, reverse the logic (low is bad)
+    // For fuel tank (PID 2F), reverse the logic — low is bad
     if (definition.pid === '2F') {
       if (definition.criticalThreshold && displayValue <= definition.criticalThreshold) return theme.gaugeRed;
       if (definition.cautionThreshold && displayValue <= definition.cautionThreshold) return theme.gaugeYellow;
@@ -71,18 +57,25 @@ export function Gauge({ value, definition, size = 140, onPress }: Props) {
     return theme.gaugeGreen;
   };
 
-  // Colored arc for current value
   const valueAngle = startAngle + normalized * arcSweep;
   const valueColor = getValueColor();
-
-  // Needle endpoint
   const needleEnd = angleToPoint(valueAngle);
 
   const content = (
-    <View style={[styles.container, { width: size, height: size + 36 }]}>
-      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+    <div
+      style={{
+        width: size,
+        height: size + 36,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative',
+      }}
+    >
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         {/* Background arc */}
-        <Path
+        <path
           d={buildArc(startAngle, endAngle)}
           stroke={theme.gaugeArc}
           strokeWidth={8}
@@ -91,7 +84,7 @@ export function Gauge({ value, definition, size = 140, onPress }: Props) {
         />
         {/* Value arc */}
         {value !== null && normalized > 0.01 && (
-          <Path
+          <path
             d={buildArc(startAngle, Math.min(valueAngle, endAngle - 0.5))}
             stroke={valueColor}
             strokeWidth={8}
@@ -100,88 +93,96 @@ export function Gauge({ value, definition, size = 140, onPress }: Props) {
           />
         )}
         {/* Center dot */}
-        <Circle cx={centerX} cy={centerY} r={4} fill={theme.textSecondary} />
+        <circle cx={centerX} cy={centerY} r={4} fill={theme.textSecondary} />
         {/* Needle */}
-        <Path
-          d={`M ${centerX} ${centerY} L ${needleEnd.x} ${needleEnd.y}`}
+        <line
+          x1={centerX}
+          y1={centerY}
+          x2={needleEnd.x}
+          y2={needleEnd.y}
           stroke={valueColor}
           strokeWidth={2.5}
           strokeLinecap="round"
         />
-      </Svg>
+      </svg>
+
       {/* Value text overlay */}
-      <View style={[styles.valueContainer, { top: centerY - 8 }]}>
-        <Text style={[styles.value, { color: theme.text }]}>
+      <div
+        style={{
+          position: 'absolute',
+          top: centerY - 8,
+          left: 0,
+          right: 0,
+          textAlign: 'center',
+          pointerEvents: 'none',
+        }}
+      >
+        <span
+          style={{
+            fontSize: 22,
+            fontWeight: 700,
+            color: theme.text,
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
           {value !== null ? Math.round(displayValue).toString() : '--'}
-        </Text>
-      </View>
+        </span>
+      </div>
+
       {/* Labels */}
-      <View style={styles.labelContainer}>
-        <Text style={[styles.label, { color: theme.textSecondary }]} numberOfLines={1}>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          marginTop: -8,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 13,
+            fontWeight: 600,
+            color: theme.textSecondary,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: size,
+          }}
+        >
           {definition.shortName}
-        </Text>
-        <Text style={[styles.unit, { color: theme.textTertiary }]}>
+        </span>
+        <span style={{ fontSize: 11, color: theme.textTertiary }}>
           {definition.unit}
-        </Text>
-      </View>
-      {/* Min/Max */}
-      <View style={[styles.rangeContainer, { width: size }]}>
-        <Text style={[styles.rangeText, { color: theme.textTertiary }]}>
-          {definition.min}
-        </Text>
-        <Text style={[styles.rangeText, { color: theme.textTertiary }]}>
-          {definition.max}
-        </Text>
-      </View>
-    </View>
+        </span>
+      </div>
+
+      {/* Min / Max range labels */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 36,
+          width: size,
+          display: 'flex',
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          padding: '0 12px',
+          boxSizing: 'border-box',
+          pointerEvents: 'none',
+        }}
+      >
+        <span style={{ fontSize: 9, color: theme.textTertiary }}>{definition.min}</span>
+        <span style={{ fontSize: 9, color: theme.textTertiary }}>{definition.max}</span>
+      </div>
+    </div>
   );
 
   if (onPress) {
     return (
-      <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
+      <div onClick={onPress} style={{ cursor: 'pointer' }}>
         {content}
-      </TouchableOpacity>
+      </div>
     );
   }
 
   return content;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  valueContainer: {
-    position: 'absolute',
-    alignItems: 'center',
-    left: 0,
-    right: 0,
-  },
-  value: {
-    fontSize: fontSize.xxl,
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
-  },
-  labelContainer: {
-    alignItems: 'center',
-    marginTop: -spacing.sm,
-  },
-  label: {
-    fontSize: fontSize.sm,
-    fontWeight: '600',
-  },
-  unit: {
-    fontSize: fontSize.xs,
-  },
-  rangeContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    position: 'absolute',
-    bottom: 36,
-  },
-  rangeText: {
-    fontSize: 9,
-  },
-});

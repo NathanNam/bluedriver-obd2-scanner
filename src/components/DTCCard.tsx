@@ -1,12 +1,10 @@
 // ============================================================
-// DTCCard — displays a single Diagnostic Trouble Code
+// DTCCard — expandable card showing a single Diagnostic Trouble Code
 // ============================================================
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { DTC } from '../types';
 import { StatusBadge } from './StatusBadge';
-import { borderRadius, fontSize, spacing } from '../utils/theme';
 import { useThemeColors } from '../utils/hooks';
 
 interface Props {
@@ -44,14 +42,31 @@ export function DTCCard({ dtc }: Props) {
   const causes = POTENTIAL_CAUSES[dtc.code] ?? [];
 
   return (
-    <TouchableOpacity
-      style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}
-      onPress={() => setExpanded(!expanded)}
-      activeOpacity={0.7}
+    <div
+      onClick={() => setExpanded(!expanded)}
+      style={{
+        border: `1px solid ${theme.border}`,
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 8,
+        backgroundColor: theme.surface,
+        cursor: causes.length > 0 ? 'pointer' : 'default',
+        userSelect: 'none',
+      }}
     >
-      <View style={styles.header}>
-        <View style={styles.codeRow}>
-          <Text style={[styles.code, { color: theme.text }]}>{dtc.code}</Text>
+      {/* Header */}
+      <div style={{ marginBottom: 4 }}>
+        <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <span
+            style={{
+              fontSize: 17,
+              fontWeight: 700,
+              fontFamily: 'monospace',
+              color: theme.text,
+            }}
+          >
+            {dtc.code}
+          </span>
           <StatusBadge
             label={dtc.severity.charAt(0).toUpperCase() + dtc.severity.slice(1)}
             color={severityColor}
@@ -64,82 +79,77 @@ export function DTCCard({ dtc }: Props) {
               size="small"
             />
           )}
-        </View>
-        <Text style={[styles.system, { color: theme.textSecondary }]}>{dtc.system}</Text>
-      </View>
+        </div>
+        <span
+          style={{
+            fontSize: 11,
+            marginTop: 2,
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+            color: theme.textSecondary,
+            display: 'block',
+          }}
+        >
+          {dtc.system}
+        </span>
+      </div>
 
-      <Text style={[styles.description, { color: theme.text }]}>{dtc.description}</Text>
+      {/* Description */}
+      <span style={{ fontSize: 15, lineHeight: '22px', color: theme.text, display: 'block' }}>
+        {dtc.description}
+      </span>
 
+      {/* Expanded causes */}
       {expanded && causes.length > 0 && (
-        <View style={[styles.causesContainer, { borderTopColor: theme.border }]}>
-          <Text style={[styles.causesTitle, { color: theme.textSecondary }]}>
+        <div
+          style={{
+            marginTop: 8,
+            paddingTop: 8,
+            borderTop: `1px solid ${theme.border}`,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: theme.textSecondary,
+              display: 'block',
+              marginBottom: 4,
+            }}
+          >
             Potential Causes:
-          </Text>
+          </span>
           {causes.map((cause, i) => (
-            <Text key={i} style={[styles.cause, { color: theme.text }]}>
+            <span
+              key={i}
+              style={{
+                fontSize: 13,
+                lineHeight: '20px',
+                paddingLeft: 8,
+                color: theme.text,
+                display: 'block',
+              }}
+            >
               {'\u2022'} {cause}
-            </Text>
+            </span>
           ))}
-        </View>
+        </div>
       )}
 
+      {/* Expand hint */}
       {causes.length > 0 && (
-        <Text style={[styles.expandHint, { color: theme.textTertiary }]}>
-          {expanded ? 'Tap to collapse' : 'Tap for details'}
-        </Text>
+        <span
+          style={{
+            fontSize: 11,
+            marginTop: 4,
+            textAlign: 'right',
+            color: theme.textTertiary,
+            display: 'block',
+          }}
+        >
+          {expanded ? 'Click to collapse' : 'Click for details'}
+        </span>
       )}
-    </TouchableOpacity>
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    borderWidth: 1,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  header: {
-    marginBottom: spacing.xs,
-  },
-  codeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  code: {
-    fontSize: fontSize.lg,
-    fontWeight: '700',
-    fontFamily: 'monospace',
-  },
-  system: {
-    fontSize: fontSize.xs,
-    marginTop: 2,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  description: {
-    fontSize: fontSize.md,
-    lineHeight: 22,
-  },
-  causesContainer: {
-    marginTop: spacing.sm,
-    paddingTop: spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  causesTitle: {
-    fontSize: fontSize.sm,
-    fontWeight: '600',
-    marginBottom: spacing.xs,
-  },
-  cause: {
-    fontSize: fontSize.sm,
-    lineHeight: 20,
-    paddingLeft: spacing.sm,
-  },
-  expandHint: {
-    fontSize: fontSize.xs,
-    marginTop: spacing.xs,
-    textAlign: 'right',
-  },
-});

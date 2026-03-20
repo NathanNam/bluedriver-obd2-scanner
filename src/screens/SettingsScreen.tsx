@@ -1,22 +1,19 @@
 // ============================================================
-// SettingsScreen — units, theme, adapter info
+// SettingsScreen — units, theme, adapter info, about
 // ============================================================
 
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useThemeColors } from '../utils/hooks';
 import { useSettingsStore } from '../store/settingsStore';
 import { useBluetoothStore } from '../store/bluetoothStore';
 import { UnitSystem, ThemeMode } from '../types';
-import { useThemeColors } from '../utils/hooks';
-import { spacing, fontSize, borderRadius } from '../utils/theme';
 
 export function SettingsScreen() {
   const theme = useThemeColors();
   const { unitSystem, themeMode, setUnitSystem, setThemeMode } = useSettingsStore();
   const { connectionState, connectedDeviceName } = useBluetoothStore();
 
-  const SegmentedControl = ({
+  const ButtonGroup = ({
     options,
     selected,
     onSelect,
@@ -25,129 +22,125 @@ export function SettingsScreen() {
     selected: string;
     onSelect: (value: any) => void;
   }) => (
-    <View style={[styles.segmented, { backgroundColor: theme.surfaceSecondary, borderColor: theme.border }]}>
+    <div
+      style={{
+        display: 'flex',
+        borderRadius: 8,
+        border: `1px solid ${theme.border}`,
+        overflow: 'hidden',
+        backgroundColor: theme.surfaceSecondary,
+      }}
+    >
       {options.map((opt) => (
-        <TouchableOpacity
+        <button
           key={opt.value}
-          style={[
-            styles.segment,
-            selected === opt.value && { backgroundColor: theme.primary },
-          ]}
-          onPress={() => onSelect(opt.value)}
+          onClick={() => onSelect(opt.value)}
+          style={{
+            flex: 1,
+            padding: '10px 0',
+            fontSize: 13,
+            fontWeight: 500,
+            border: 'none',
+            cursor: 'pointer',
+            backgroundColor: selected === opt.value ? theme.primary : 'transparent',
+            color: selected === opt.value ? '#FFFFFF' : theme.text,
+            transition: 'background-color 0.15s, color 0.15s',
+          }}
         >
-          <Text
-            style={[
-              styles.segmentText,
-              { color: selected === opt.value ? '#FFF' : theme.text },
-            ]}
-          >
-            {opt.label}
-          </Text>
-        </TouchableOpacity>
+          {opt.label}
+        </button>
       ))}
-    </View>
+    </div>
+  );
+
+  const InfoRow = ({ label, value }: { label: string; value: string }) => (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '8px 0',
+      }}
+    >
+      <span style={{ fontSize: 14, color: theme.textSecondary }}>{label}</span>
+      <span style={{ fontSize: 14, fontWeight: 500, color: theme.text }}>{value}</span>
+    </div>
+  );
+
+  const Section = ({
+    title,
+    children,
+  }: {
+    title: string;
+    children: React.ReactNode;
+  }) => (
+    <div
+      style={{
+        backgroundColor: theme.surface,
+        border: `1px solid ${theme.border}`,
+        borderRadius: 14,
+        padding: 16,
+        marginBottom: 16,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 600,
+          letterSpacing: 0.5,
+          color: theme.textSecondary,
+          marginBottom: 10,
+          textTransform: 'uppercase',
+        }}
+      >
+        {title}
+      </div>
+      {children}
+    </div>
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[styles.title, { color: theme.text }]}>Settings</Text>
+    <div style={{ minHeight: '100vh', backgroundColor: theme.background, padding: 20, paddingBottom: 48 }}>
+      <h1 style={{ margin: '0 0 20px', fontSize: 28, fontWeight: 700, color: theme.text }}>
+        Settings
+      </h1>
 
-        {/* Units */}
-        <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>UNITS</Text>
-          <SegmentedControl
-            options={[
-              { label: 'Imperial (°F, mph)', value: 'imperial' },
-              { label: 'Metric (°C, km/h)', value: 'metric' },
-            ]}
-            selected={unitSystem}
-            onSelect={setUnitSystem}
-          />
-        </View>
+      {/* Units */}
+      <Section title="Units">
+        <ButtonGroup
+          options={[
+            { label: 'Imperial (\u00B0F, mph)', value: 'imperial' },
+            { label: 'Metric (\u00B0C, km/h)', value: 'metric' },
+          ]}
+          selected={unitSystem}
+          onSelect={(v: UnitSystem) => setUnitSystem(v)}
+        />
+      </Section>
 
-        {/* Theme */}
-        <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>APPEARANCE</Text>
-          <SegmentedControl
-            options={[
-              { label: 'System', value: 'system' },
-              { label: 'Light', value: 'light' },
-              { label: 'Dark', value: 'dark' },
-            ]}
-            selected={themeMode}
-            onSelect={setThemeMode}
-          />
-        </View>
+      {/* Theme */}
+      <Section title="Appearance">
+        <ButtonGroup
+          options={[
+            { label: 'System', value: 'system' },
+            { label: 'Light', value: 'light' },
+            { label: 'Dark', value: 'dark' },
+          ]}
+          selected={themeMode}
+          onSelect={(v: ThemeMode) => setThemeMode(v)}
+        />
+      </Section>
 
-        {/* Adapter Info */}
-        <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>ADAPTER</Text>
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Status</Text>
-            <Text style={[styles.infoValue, { color: theme.text }]}>{connectionState}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Device</Text>
-            <Text style={[styles.infoValue, { color: theme.text }]}>
-              {connectedDeviceName ?? 'None'}
-            </Text>
-          </View>
-        </View>
+      {/* Adapter Info */}
+      <Section title="Adapter">
+        <InfoRow label="Status" value={connectionState} />
+        <InfoRow label="Device" value={connectedDeviceName ?? 'None'} />
+      </Section>
 
-        {/* About */}
-        <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>ABOUT</Text>
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>App Version</Text>
-            <Text style={[styles.infoValue, { color: theme.text }]}>1.0.0</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>OBD Protocol</Text>
-            <Text style={[styles.infoValue, { color: theme.text }]}>ELM327</Text>
-          </View>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+      {/* About */}
+      <Section title="About">
+        <InfoRow label="App Version" value="1.0.0" />
+        <InfoRow label="OBD Protocol" value="ELM327" />
+      </Section>
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { padding: spacing.lg, paddingBottom: spacing.xxl },
-  title: { fontSize: fontSize.xxxl, fontWeight: '700', marginBottom: spacing.lg },
-  section: {
-    borderWidth: 1,
-    borderRadius: borderRadius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  sectionTitle: {
-    fontSize: fontSize.xs,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-    marginBottom: spacing.sm,
-  },
-  segmented: {
-    flexDirection: 'row',
-    borderRadius: borderRadius.sm,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  segment: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-  },
-  segmentText: {
-    fontSize: fontSize.sm,
-    fontWeight: '500',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.xs,
-  },
-  infoLabel: { fontSize: fontSize.sm },
-  infoValue: { fontSize: fontSize.sm, fontWeight: '500' },
-});

@@ -3,15 +3,20 @@
 // ============================================================
 
 import React from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { ConnectionState } from '../types';
-import { spacing, fontSize, borderRadius } from '../utils/theme';
 import { useThemeColors } from '../utils/hooks';
 
 interface Props {
   state: ConnectionState;
   deviceName?: string | null;
 }
+
+const spinnerKeyframes = `
+@keyframes obd2-spinner {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+`;
 
 export function ConnectionStatusBar({ state, deviceName }: Props) {
   const theme = useThemeColors();
@@ -30,34 +35,61 @@ export function ConnectionStatusBar({ state, deviceName }: Props) {
   const config = stateConfig[state];
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      <View style={[styles.dot, { backgroundColor: config.color }]} />
-      <Text style={[styles.label, { color: theme.text }]} numberOfLines={1}>
-        {config.label}
-      </Text>
-      {config.showSpinner && <ActivityIndicator size="small" color={config.color} />}
-    </View>
+    <>
+      <style>{spinnerKeyframes}</style>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+          padding: '8px 12px',
+          borderRadius: 6,
+          border: `1px solid ${theme.border}`,
+          backgroundColor: theme.surface,
+          gap: 8,
+        }}
+      >
+        {/* Colored dot */}
+        <div
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            backgroundColor: config.color,
+            flexShrink: 0,
+          }}
+        />
+
+        {/* Label */}
+        <span
+          style={{
+            fontSize: 13,
+            fontWeight: 500,
+            color: theme.text,
+            flex: 1,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {config.label}
+        </span>
+
+        {/* CSS spinner when connecting */}
+        {config.showSpinner && (
+          <div
+            style={{
+              width: 16,
+              height: 16,
+              border: `2px solid ${theme.border}`,
+              borderTopColor: config.color,
+              borderRadius: '50%',
+              animation: 'obd2-spinner 0.8s linear infinite',
+              flexShrink: 0,
+            }}
+          />
+        )}
+      </div>
+    </>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.sm,
-    borderWidth: 1,
-    gap: spacing.sm,
-  },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  label: {
-    fontSize: fontSize.sm,
-    fontWeight: '500',
-    flex: 1,
-  },
-});

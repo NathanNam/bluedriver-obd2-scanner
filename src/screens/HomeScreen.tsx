@@ -2,24 +2,16 @@
 // HomeScreen — BT device discovery, connection, mode selection
 // ============================================================
 
-import React, { useCallback, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  FlatList,
-  Alert,
-  Platform,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React from 'react';
+import { useThemeColors } from '../utils/hooks';
 import { useBluetoothStore } from '../store/bluetoothStore';
 import { ConnectionStatusBar } from '../components/ConnectionStatusBar';
-import { DiscoveredDevice } from '../types';
-import { useThemeColors } from '../utils/hooks';
-import { spacing, fontSize, borderRadius } from '../utils/theme';
 
-export function HomeScreen({ navigation }: any) {
+interface Props {
+  onNavigate: (screen: string, params?: any) => void;
+}
+
+export function HomeScreen({ onNavigate }: Props) {
   const theme = useThemeColors();
   const {
     connectionState,
@@ -33,273 +25,258 @@ export function HomeScreen({ navigation }: any) {
     clearError,
   } = useBluetoothStore();
 
-  useEffect(() => {
-    if (error) {
-      Alert.alert('Connection Error', error, [{ text: 'OK', onPress: clearError }]);
-    }
-  }, [error]);
+  const isScanning = connectionState === 'SCANNING';
+  const isConnected = connectionState === 'READY' || connectionState === 'SCANNING_OBD';
+  const isBusy = connectionState === 'CONNECTING' || connectionState === 'INITIALIZING';
 
-  const handleScanPress = useCallback(() => {
-    if (connectionState === 'SCANNING') {
+  const handleScanToggle = async () => {
+    if (isConnected) {
+      const ok = window.confirm('Disconnect from the OBD2 adapter?');
+      if (ok) await disconnect();
+    } else if (isScanning) {
       stopScan();
     } else {
-      startScan();
+      await startScan();
     }
-  }, [connectionState]);
+  };
 
-  const handleDevicePress = useCallback(async (device: DiscoveredDevice) => {
+  const handleDevicePress = async (deviceId: string) => {
     stopScan();
-    await connect(device.id);
-  }, []);
-
-  const handleDisconnect = useCallback(() => {
-    Alert.alert('Disconnect', 'Disconnect from the adapter?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Disconnect', style: 'destructive', onPress: disconnect },
-    ]);
-  }, []);
-
-  const isReady = connectionState === 'READY';
-
-  const renderDevice = ({ item }: { item: DiscoveredDevice }) => (
-    <TouchableOpacity
-      style={[styles.deviceRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
-      onPress={() => handleDevicePress(item)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.deviceInfo}>
-        <Text style={[styles.deviceName, { color: theme.text }]}>
-          {item.name || 'Unknown Device'}
-        </Text>
-        <Text style={[styles.deviceId, { color: theme.textSecondary }]}>{item.id}</Text>
-      </View>
-      {item.rssi !== null && (
-        <Text style={[styles.rssi, { color: theme.textTertiary }]}>{item.rssi} dBm</Text>
-      )}
-    </TouchableOpacity>
-  );
+    await connect(deviceId);
+  };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+    <div style={{ minHeight: '100vh', backgroundColor: theme.background, padding: 20 }}>
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.text }]}>OBD2 Scanner</Text>
-        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+      <div style={{ marginBottom: 24 }}>
+        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, color: theme.text }}>
+          OBD2 Scanner
+        </h1>
+        <p style={{ margin: '4px 0 0', fontSize: 14, color: theme.textSecondary }}>
           Connect to your vehicle adapter
-        </Text>
-      </View>
+        </p>
+      </div>
 
-      {/* Connection Status */}
-      <View style={styles.section}>
-        <ConnectionStatusBar state={connectionState} deviceName={connectedDeviceName} />
-      </View>
+      {/* Connection status */}
+      <ConnectionStatusBar state={connectionState} deviceName={connectedDeviceName} />
 
-      {/* Scan / Disconnect Button */}
-      <View style={styles.section}>
-        {isReady ? (
-          <TouchableOpacity
-            style={[styles.disconnectButton, { borderColor: theme.disconnected }]}
-            onPress={handleDisconnect}
+      {/* Error banner */}
+      {error && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: 12,
+            backgroundColor: theme.critical + '18',
+            borderRadius: 8,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <span style={{ color: theme.critical, fontSize: 14 }}>{error}</span>
+          <button
+            onClick={clearError}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: theme.critical,
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontSize: 13,
+            }}
           >
-            <Text style={[styles.disconnectText, { color: theme.disconnected }]}>
-              Disconnect
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={[
-              styles.scanButton,
-              {
-                backgroundColor:
-                  connectionState === 'SCANNING' ? theme.textSecondary : theme.primary,
-              },
-            ]}
-            onPress={handleScanPress}
-            disabled={
-              connectionState === 'CONNECTING' || connectionState === 'INITIALIZING'
-            }
-          >
-            <Text style={styles.scanButtonText}>
-              {connectionState === 'SCANNING' ? 'Stop Scanning' : 'Scan for Devices'}
-            </Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Discovered Devices */}
-      {!isReady && discoveredDevices.length > 0 && (
-        <View style={styles.deviceListSection}>
-          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-            DISCOVERED DEVICES
-          </Text>
-          <FlatList
-            data={discoveredDevices}
-            keyExtractor={(item) => item.id}
-            renderItem={renderDevice}
-            style={styles.deviceList}
-          />
-        </View>
+            Dismiss
+          </button>
+        </div>
       )}
 
-      {/* Mode Selection (shown when connected) */}
-      {isReady && (
-        <View style={styles.modeSection}>
-          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-            CHOOSE SCAN MODE
-          </Text>
+      {/* Scan / Disconnect button */}
+      <button
+        onClick={handleScanToggle}
+        disabled={isBusy}
+        style={{
+          marginTop: 16,
+          width: '100%',
+          padding: '14px 0',
+          fontSize: 16,
+          fontWeight: 600,
+          color: '#FFFFFF',
+          backgroundColor: isConnected
+            ? theme.critical
+            : isScanning
+            ? theme.textSecondary
+            : theme.primary,
+          border: 'none',
+          borderRadius: 10,
+          cursor: isBusy ? 'not-allowed' : 'pointer',
+          opacity: isBusy ? 0.5 : 1,
+        }}
+      >
+        {isConnected
+          ? 'Disconnect'
+          : isScanning
+          ? 'Stop Scanning'
+          : isBusy
+          ? 'Connecting...'
+          : 'Scan for Devices'}
+      </button>
 
-          <TouchableOpacity
-            style={[styles.modeCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
-            onPress={() => navigation.navigate('Scan')}
-            activeOpacity={0.7}
+      {/* Discovered devices list */}
+      {!isConnected && discoveredDevices.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: 0.5,
+              color: theme.textSecondary,
+              marginBottom: 10,
+              textTransform: 'uppercase',
+            }}
           >
-            <View style={[styles.modeIcon, { backgroundColor: theme.primary + '15' }]}>
-              <Text style={styles.modeIconText}>{'{ }'}</Text>
-            </View>
-            <View style={styles.modeInfo}>
-              <Text style={[styles.modeName, { color: theme.text }]}>One-Time Scan</Text>
-              <Text style={[styles.modeDesc, { color: theme.textSecondary }]}>
-                Read fault codes, VIN, and vehicle info
-              </Text>
-            </View>
-            <Text style={[styles.arrow, { color: theme.textTertiary }]}>{'>'}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.modeCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
-            onPress={() => navigation.navigate('LiveTab')}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.modeIcon, { backgroundColor: theme.success + '15' }]}>
-              <Text style={styles.modeIconText}>~</Text>
-            </View>
-            <View style={styles.modeInfo}>
-              <Text style={[styles.modeName, { color: theme.text }]}>Live Scan</Text>
-              <Text style={[styles.modeDesc, { color: theme.textSecondary }]}>
-                Real-time gauges, charts, and recording
-              </Text>
-            </View>
-            <Text style={[styles.arrow, { color: theme.textTertiary }]}>{'>'}</Text>
-          </TouchableOpacity>
-        </View>
+            Discovered Devices
+          </div>
+          {discoveredDevices.map((device) => (
+            <button
+              key={device.id}
+              onClick={() => handleDevicePress(device.id)}
+              disabled={isBusy}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                width: '100%',
+                padding: '14px 16px',
+                marginBottom: 8,
+                backgroundColor: theme.surface,
+                border: `1px solid ${theme.border}`,
+                borderRadius: 10,
+                cursor: isBusy ? 'not-allowed' : 'pointer',
+                textAlign: 'left',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: theme.text }}>
+                  {device.name || 'Unknown Device'}
+                </div>
+                <div style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
+                  {device.id}
+                </div>
+              </div>
+              {device.rssi != null && (
+                <span style={{ fontSize: 12, color: theme.textTertiary }}>
+                  {device.rssi} dBm
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
       )}
-    </SafeAreaView>
+
+      {/* Mode cards when connected */}
+      {isConnected && (
+        <div style={{ marginTop: 32 }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: 0.5,
+              color: theme.textSecondary,
+              marginBottom: 12,
+              textTransform: 'uppercase',
+            }}
+          >
+            Choose Scan Mode
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <button
+              onClick={() => onNavigate('scan')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 14,
+                width: '100%',
+                padding: 16,
+                backgroundColor: theme.surface,
+                border: `1px solid ${theme.border}`,
+                borderRadius: 12,
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+            >
+              <div
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 8,
+                  backgroundColor: theme.primary + '15',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 20,
+                  flexShrink: 0,
+                }}
+              >
+                {'{ }'}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 16, fontWeight: 600, color: theme.text }}>
+                  One-Time Scan
+                </div>
+                <div style={{ fontSize: 13, color: theme.textSecondary, marginTop: 2 }}>
+                  Read fault codes, VIN, and vehicle info
+                </div>
+              </div>
+              <span style={{ fontSize: 20, color: theme.textTertiary, fontWeight: 300 }}>
+                {'>'}
+              </span>
+            </button>
+
+            <button
+              onClick={() => onNavigate('live')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 14,
+                width: '100%',
+                padding: 16,
+                backgroundColor: theme.surface,
+                border: `1px solid ${theme.border}`,
+                borderRadius: 12,
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+            >
+              <div
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 8,
+                  backgroundColor: theme.success + '15',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 20,
+                  flexShrink: 0,
+                }}
+              >
+                ~
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 16, fontWeight: 600, color: theme.text }}>
+                  Live Scan
+                </div>
+                <div style={{ fontSize: 13, color: theme.textSecondary, marginTop: 2 }}>
+                  Real-time gauges, charts, and recording
+                </div>
+              </div>
+              <span style={{ fontSize: 20, color: theme.textTertiary, fontWeight: 300 }}>
+                {'>'}
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.md,
-  },
-  title: {
-    fontSize: fontSize.xxxl,
-    fontWeight: '700',
-  },
-  subtitle: {
-    fontSize: fontSize.md,
-    marginTop: spacing.xs,
-  },
-  section: {
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  sectionTitle: {
-    fontSize: fontSize.xs,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-    marginBottom: spacing.sm,
-    paddingHorizontal: spacing.lg,
-  },
-  scanButton: {
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.md,
-    alignItems: 'center',
-  },
-  scanButtonText: {
-    color: '#FFFFFF',
-    fontSize: fontSize.lg,
-    fontWeight: '600',
-  },
-  disconnectButton: {
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.md,
-    alignItems: 'center',
-    borderWidth: 1,
-  },
-  disconnectText: {
-    fontSize: fontSize.lg,
-    fontWeight: '600',
-  },
-  deviceListSection: {
-    flex: 1,
-  },
-  deviceList: {
-    paddingHorizontal: spacing.lg,
-  },
-  deviceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.md,
-    borderWidth: 1,
-    borderRadius: borderRadius.md,
-    marginBottom: spacing.sm,
-  },
-  deviceInfo: {
-    flex: 1,
-  },
-  deviceName: {
-    fontSize: fontSize.md,
-    fontWeight: '600',
-  },
-  deviceId: {
-    fontSize: fontSize.xs,
-    marginTop: 2,
-  },
-  rssi: {
-    fontSize: fontSize.sm,
-  },
-  modeSection: {
-    flex: 1,
-    paddingTop: spacing.md,
-  },
-  modeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.md,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderRadius: borderRadius.md,
-  },
-  modeIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: borderRadius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modeIconText: {
-    fontSize: fontSize.xl,
-  },
-  modeInfo: {
-    flex: 1,
-    marginLeft: spacing.md,
-  },
-  modeName: {
-    fontSize: fontSize.lg,
-    fontWeight: '600',
-  },
-  modeDesc: {
-    fontSize: fontSize.sm,
-    marginTop: 2,
-  },
-  arrow: {
-    fontSize: fontSize.xl,
-    fontWeight: '300',
-  },
-});
