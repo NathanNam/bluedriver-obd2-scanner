@@ -3,10 +3,21 @@
 // Handles BLE device discovery, connection, and ELM327 comms
 // ============================================================
 
-import { BleManager, Device, Characteristic, Subscription } from 'react-native-ble-plx';
 import { Platform } from 'react-native';
 import { ConnectionState, DiscoveredDevice } from '../types';
 import { ELM327_INIT_SEQUENCE, terminateCommand } from '../obd2/commands';
+
+// Lazy-load react-native-ble-plx so the app doesn't crash in Expo Go
+// (Expo Go doesn't include BLE native modules)
+let BleManagerClass: any = null;
+try {
+  BleManagerClass = require('react-native-ble-plx').BleManager;
+} catch {
+  console.warn('react-native-ble-plx not available — Bluetooth disabled (Expo Go mode)');
+}
+
+type Device = any;
+type Subscription = { remove: () => void };
 
 // BlueDriver BLE service/characteristic UUIDs (common defaults — verify with BLE scanner)
 const BLUEDRIVER_SERVICE_UUID = 'EF680100-9B35-4933-9B10-52FFA9740042';
@@ -28,7 +39,7 @@ type DeviceListener = (device: DiscoveredDevice) => void;
 type ErrorListener = (error: string) => void;
 
 class BluetoothManager {
-  private bleManager: BleManager;
+  private bleManager: any;
   private connectedDevice: Device | null = null;
   private serviceUUID: string | null = null;
   private txCharUUID: string | null = null;
@@ -46,7 +57,15 @@ class BluetoothManager {
   private _connectionState: ConnectionState = 'IDLE';
 
   constructor() {
-    this.bleManager = new BleManager();
+    if (BleManagerClass) {
+      this.bleManager = new BleManagerClass();
+    } else {
+      this.bleManager = null;
+    }
+  }
+
+  get isBLEAvailable(): boolean {
+    return this.bleManager !== null;
   }
 
   // --- State Management ---
@@ -88,6 +107,12 @@ class BluetoothManager {
   // --- Scanning ---
 
   async startScan(): Promise<void> {
+    if (!this.bleManager) {
+      this.emitError('Bluetooth is not available in Expo Go. Use a development build to enable BLE.');
+      this.setState('ERROR');
+      return;
+    }
+
     if (this._connectionState !== 'IDLE' && this._connectionState !== 'DISCONNECTED') {
       return;
     }
@@ -103,7 +128,7 @@ class BluetoothManager {
         resolve();
       }, SCAN_TIMEOUT_MS);
 
-      this.bleManager.startDeviceScan(null, { allowDuplicates: false }, (error, device) => {
+      this.bleManager.startDeviceScan(null, { allowDuplicates: false }, (error: any, device: any) => {
         if (error) {
           clearTimeout(scanTimeout);
           this.emitError(`Scan error: ${error.message}`);
@@ -126,7 +151,7 @@ class BluetoothManager {
   }
 
   stopScan(): void {
-    this.bleManager.stopDeviceScan();
+    this.bleManager?.stopDeviceScan();
     if (this._connectionState === 'SCANNING') {
       this.setState('IDLE');
     }
@@ -135,6 +160,11 @@ class BluetoothManager {
   // --- Connection ---
 
   async connect(deviceId: string): Promise<boolean> {
+    if (!this.bleManager) {
+      this.emitError('Bluetooth is not available in Expo Go.');
+      return false;
+    }
+
     try {
       this.setState('CONNECTING');
       this.bleManager.stopDeviceScan();
@@ -159,7 +189,7 @@ class BluetoothManager {
       this.subscribeToNotifications();
 
       // Monitor disconnection
-      device.onDisconnected((error, dev) => {
+      device.onDisconnected((error: any, dev: any) => {
         this.cleanup();
         this.setState('DISCONNECTED');
         if (error) {
@@ -188,7 +218,7 @@ class BluetoothManager {
   async disconnect(): Promise<void> {
     if (this.connectedDevice) {
       try {
-        await this.bleManager.cancelDeviceConnection(this.connectedDevice.id);
+        await this.bleManager?.cancelDeviceConnection(this.connectedDevice.id);
       } catch {
         // Device may already be disconnected
       }
@@ -221,13 +251,13 @@ class BluetoothManager {
       const services = await device.services();
       for (const service of services) {
         const chars = await service.characteristics();
-        const charUUIDs = chars.map((c) => c.uuid.toUpperCase());
+        const charUUIDs = chars.map((c: any) => c.uuid.toUpperCase());
 
         // Try BlueDriver UUIDs
         if (service.uuid.toUpperCase().includes(BLUEDRIVER_SERVICE_UUID.toUpperCase().substring(0, 8))) {
           this.serviceUUID = service.uuid;
-          const tx = chars.find((c) => c.isWritableWithResponse || c.isWritableWithoutResponse);
-          const rx = chars.find((c) => c.isNotifiable || c.isIndicatable);
+          const tx = chars.find((c: any) => c.isWritableWithResponse || c.isWritableWithoutResponse);
+          const rx = chars.find((c: any) => c.isNotifiable || c.isIndicatable);
           if (tx && rx) {
             this.txCharUUID = tx.uuid;
             this.rxCharUUID = rx.uuid;
@@ -241,8 +271,8 @@ class BluetoothManager {
           service.uuid.toUpperCase().includes('FFE0')
         ) {
           this.serviceUUID = service.uuid;
-          const tx = chars.find((c) => c.isWritableWithResponse || c.isWritableWithoutResponse);
-          const rx = chars.find((c) => c.isNotifiable || c.isIndicatable);
+          const tx = chars.find((c: any) => c.isWritableWithResponse || c.isWritableWithoutResponse);
+          const rx = chars.find((c: any) => c.isNotifiable || c.isIndicatable);
           if (tx && rx) {
             this.txCharUUID = tx.uuid;
             this.rxCharUUID = rx.uuid;
@@ -254,8 +284,8 @@ class BluetoothManager {
       // Fallback: find any writable + notifiable characteristic pair
       for (const service of services) {
         const chars = await service.characteristics();
-        const tx = chars.find((c) => c.isWritableWithResponse || c.isWritableWithoutResponse);
-        const rx = chars.find((c) => c.isNotifiable || c.isIndicatable);
+        const tx = chars.find((c: any) => c.isWritableWithResponse || c.isWritableWithoutResponse);
+        const rx = chars.find((c: any) => c.isNotifiable || c.isIndicatable);
         if (tx && rx) {
           this.serviceUUID = service.uuid;
           this.txCharUUID = tx.uuid;
@@ -278,7 +308,7 @@ class BluetoothManager {
     this.rxSubscription = this.connectedDevice.monitorCharacteristicForService(
       this.serviceUUID,
       this.rxCharUUID,
-      (error, characteristic) => {
+      (error: any, characteristic: any) => {
         if (error) {
           return;
         }
@@ -427,7 +457,7 @@ class BluetoothManager {
 
   destroy(): void {
     this.cleanup();
-    this.bleManager.destroy();
+    this.bleManager?.destroy();
   }
 }
 
