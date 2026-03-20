@@ -139,7 +139,7 @@ export function RecordingDetailScreen({ params }: Props) {
   return (
     <div
       style={{
-        minHeight: '100vh',
+        minHeight: '100%',
         backgroundColor: theme.background,
         padding: 20,
         display: 'flex',

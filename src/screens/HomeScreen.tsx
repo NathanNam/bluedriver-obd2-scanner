@@ -46,7 +46,7 @@ export function HomeScreen({ onNavigate }: Props) {
   };
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: theme.background, padding: 20 }}>
+    <div style={{ minHeight: '100%', backgroundColor: theme.background, padding: 24 }}>
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, color: theme.text }}>
@@ -188,7 +188,7 @@ export function HomeScreen({ onNavigate }: Props) {
           >
             Choose Scan Mode
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
             <button
               onClick={() => onNavigate('scan')}
               style={{

@@ -57,19 +57,14 @@ export function App() {
 
   const handleTabPress = (tab: Tab) => {
     if (tab === activeTab) {
-      // Reset to root screen of this tab
       const roots: Record<Tab, string> = {
-        connect: 'home',
-        live: 'live',
-        history: 'historyList',
-        settings: 'settings',
+        connect: 'home', live: 'live', history: 'historyList', settings: 'settings',
       };
       setViewStack((prev) => ({ ...prev, [tab]: { screen: roots[tab] } }));
     }
     setActiveTab(tab);
   };
 
-  // Show back button if not on a root screen
   const rootScreens = ['home', 'live', 'historyList', 'settings'];
   const showBack = !rootScreens.includes(currentView.screen);
 
@@ -83,46 +78,23 @@ export function App() {
   return (
     <div style={{
       display: 'flex',
-      flexDirection: 'column',
       height: '100vh',
-      maxWidth: 480,
-      margin: '0 auto',
       background: theme.background,
-      position: 'relative',
     }}>
-      {/* Back button header */}
-      {showBack && (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          padding: '8px 16px',
-          borderBottom: `1px solid ${theme.border}`,
-          background: theme.surface,
-        }}>
-          <button
-            onClick={() => {
-              const roots: Record<Tab, string> = { connect: 'home', live: 'live', history: 'historyList', settings: 'settings' };
-              navigate(roots[activeTab]);
-            }}
-            style={{ color: theme.primary, fontSize: 15, fontWeight: 600 }}
-          >
-            ← Back
-          </button>
-        </div>
-      )}
-
-      {/* Content */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
-        {renderContent()}
-      </div>
-
-      {/* Tab Bar */}
-      <div style={{
-        display: 'flex',
-        borderTop: `1px solid ${theme.border}`,
+      {/* Sidebar nav — desktop only (>768px) */}
+      <nav className="sidebar" style={{
+        width: 220,
+        borderRight: `1px solid ${theme.border}`,
         background: theme.surface,
-        padding: '6px 0 env(safe-area-inset-bottom, 8px)',
+        display: 'flex',
+        flexDirection: 'column',
+        padding: '24px 0',
+        gap: 4,
+        flexShrink: 0,
       }}>
+        <div style={{ padding: '0 20px 20px', fontSize: 18, fontWeight: 700, color: theme.text }}>
+          OBD2 Scanner
+        </div>
         {tabs.map((tab) => {
           const isActive = activeTab === tab.key;
           return (
@@ -130,24 +102,95 @@ export function App() {
               key={tab.key}
               onClick={() => handleTabPress(tab.key)}
               style={{
-                flex: 1,
                 display: 'flex',
-                flexDirection: 'column',
                 alignItems: 'center',
-                gap: 2,
-                padding: '6px 0',
-                color: isActive ? theme.primary : theme.textSecondary,
+                gap: 10,
+                padding: '10px 20px',
+                textAlign: 'left',
+                background: isActive ? theme.primary + '15' : 'transparent',
+                color: isActive ? theme.primary : theme.text,
+                fontWeight: isActive ? 600 : 400,
+                fontSize: 14,
+                borderRight: isActive ? `3px solid ${theme.primary}` : '3px solid transparent',
               }}
             >
-              <span style={{ fontSize: 13, fontWeight: isActive ? 700 : 400 }}>
-                [{tab.icon}]
+              <span style={{
+                width: 28, height: 28, borderRadius: 6,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: isActive ? theme.primary + '20' : theme.surfaceSecondary,
+                fontSize: 12, fontWeight: 600,
+              }}>
+                {tab.icon}
               </span>
-              <span style={{ fontSize: 10, fontWeight: isActive ? 600 : 400 }}>
-                {tab.label}
-              </span>
+              {tab.label}
             </button>
           );
         })}
+      </nav>
+
+      {/* Main content area */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        {/* Back button header */}
+        {showBack && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            padding: '10px 24px',
+            borderBottom: `1px solid ${theme.border}`,
+            background: theme.surface,
+          }}>
+            <button
+              onClick={() => {
+                const roots: Record<Tab, string> = { connect: 'home', live: 'live', history: 'historyList', settings: 'settings' };
+                navigate(roots[activeTab]);
+              }}
+              style={{ color: theme.primary, fontSize: 15, fontWeight: 600 }}
+            >
+              ← Back
+            </button>
+          </div>
+        )}
+
+        {/* Content */}
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          <div style={{ maxWidth: 960, margin: '0 auto', width: '100%' }}>
+            {renderContent()}
+          </div>
+        </div>
+
+        {/* Bottom tab bar — mobile only (<768px) */}
+        <div className="bottom-tabs" style={{
+          display: 'flex',
+          borderTop: `1px solid ${theme.border}`,
+          background: theme.surface,
+          padding: '6px 0 env(safe-area-inset-bottom, 8px)',
+        }}>
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => handleTabPress(tab.key)}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 2,
+                  padding: '6px 0',
+                  color: isActive ? theme.primary : theme.textSecondary,
+                }}
+              >
+                <span style={{ fontSize: 13, fontWeight: isActive ? 700 : 400 }}>
+                  [{tab.icon}]
+                </span>
+                <span style={{ fontSize: 10, fontWeight: isActive ? 600 : 400 }}>
+                  {tab.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

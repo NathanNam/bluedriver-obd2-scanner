@@ -60,7 +60,7 @@ export function ScanDetailScreen({ params }: Props) {
   return (
     <div
       style={{
-        minHeight: '100vh',
+        minHeight: '100%',
         backgroundColor: theme.background,
         padding: 20,
         paddingBottom: 48,

@@ -27,3 +27,15 @@ button {
   background: rgba(128, 128, 128, 0.3);
   border-radius: 3px;
 }
+
+/* Desktop: show sidebar, hide bottom tabs */
+@media (min-width: 768px) {
+  .sidebar { display: flex !important; }
+  .bottom-tabs { display: none !important; }
+}
+
+/* Mobile: hide sidebar, show bottom tabs */
+@media (max-width: 767px) {
+  .sidebar { display: none !important; }
+  .bottom-tabs { display: flex !important; }
+}

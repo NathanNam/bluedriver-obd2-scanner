@@ -44,7 +44,7 @@ export function HistoryScreen({ onNavigate }: Props) {
   };
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: theme.background, padding: 20 }}>
+    <div style={{ minHeight: '100%', backgroundColor: theme.background, padding: 20 }}>
       <h1 style={{ margin: '0 0 20px', fontSize: 28, fontWeight: 700, color: theme.text }}>
         History
       </h1>

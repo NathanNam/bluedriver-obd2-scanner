@@ -18,3 +18,16 @@ export function useThemeColors() {
   const isDark = themeMode === 'dark' || (themeMode === 'system' && systemIsDark);
   return isDark ? darkColors : colors;
 }
+
+function subscribeToResize(callback: () => void) {
+  window.addEventListener('resize', callback);
+  return () => window.removeEventListener('resize', callback);
+}
+
+function getWindowWidth() {
+  return window.innerWidth;
+}
+
+export function useWindowWidth() {
+  return useSyncExternalStore(subscribeToResize, getWindowWidth);
+}

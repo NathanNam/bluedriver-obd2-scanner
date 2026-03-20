@@ -117,7 +117,7 @@ export function ScanScreen({ onNavigate }: Props) {
     return (
       <div
         style={{
-          minHeight: '100vh',
+          minHeight: '100%',
           backgroundColor: theme.background,
           display: 'flex',
           flexDirection: 'column',
@@ -173,7 +173,7 @@ export function ScanScreen({ onNavigate }: Props) {
     return (
       <div
         style={{
-          minHeight: '100vh',
+          minHeight: '100%',
           backgroundColor: theme.background,
           display: 'flex',
           flexDirection: 'column',
@@ -232,7 +232,7 @@ export function ScanScreen({ onNavigate }: Props) {
   };
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: theme.background, padding: 20, paddingBottom: 48 }}>
+    <div style={{ minHeight: '100%', backgroundColor: theme.background, padding: 24, paddingBottom: 48 }}>
       {/* Vehicle Info Card */}
       <div
         style={{

@@ -100,7 +100,7 @@ export function SettingsScreen() {
   );
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: theme.background, padding: 20, paddingBottom: 48 }}>
+    <div style={{ minHeight: '100%', backgroundColor: theme.background, padding: 20, paddingBottom: 48 }}>
       <h1 style={{ margin: '0 0 20px', fontSize: 28, fontWeight: 700, color: theme.text }}>
         Settings
       </h1>
