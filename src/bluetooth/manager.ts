@@ -270,12 +270,18 @@ class BluetoothManager {
         chars.forEach((c: any) => {
           console.log(`  [BLE] Char ${c.uuid} — write:${c.properties.write} writeNoResp:${c.properties.writeWithoutResponse} notify:${c.properties.notify} indicate:${c.properties.indicate}`);
         });
-        const tx = chars.find((c: any) => c.properties.write || c.properties.writeWithoutResponse);
-        const rx = chars.find((c: any) => c.properties.notify || c.properties.indicate);
-        if (tx && rx) {
-          this.txChar = tx;
-          this.rxChar = rx;
-          console.log(`[BLE] Using TX: ${tx.uuid}, RX: ${rx.uuid}`);
+        const writable = chars.filter((c: any) => c.properties.write || c.properties.writeWithoutResponse);
+        const notifiable = chars.filter((c: any) => c.properties.notify || c.properties.indicate);
+
+        if (writable.length > 0 && notifiable.length > 0) {
+          // Prefer distinct TX/RX characteristics if available
+          const rxOnly = notifiable.find((c: any) => !c.properties.write && !c.properties.writeWithoutResponse);
+          const txOnly = writable.find((c: any) => !c.properties.notify && !c.properties.indicate);
+
+          this.txChar = txOnly ?? writable[0];
+          this.rxChar = rxOnly ?? notifiable.find((c: any) => c.uuid !== this.txChar!.uuid) ?? notifiable[0];
+
+          console.log(`[BLE] Using TX: ${this.txChar.uuid}, RX: ${this.rxChar.uuid}`);
           return true;
         }
       } catch { /* service not found, try next */ }
