@@ -362,7 +362,14 @@ class BluetoothManager {
       const cmdStr = terminateCommand(command);
       const data = new TextEncoder().encode(cmdStr);
       console.log(`[BLE] TX write: "${command}" (${data.length} bytes)`);
-      this.txChar!.writeValue(data).then(() => {
+
+      // Try writeValueWithoutResponse first (many BLE OBD adapters require this),
+      // fall back to writeValue (write-with-response)
+      const writeOp = this.txChar!.properties.writeWithoutResponse
+        ? this.txChar!.writeValueWithoutResponse(data)
+        : this.txChar!.writeValueWithResponse(data);
+
+      writeOp.then(() => {
         console.log(`[BLE] TX write success`);
       }).catch((err: any) => {
         console.error(`[BLE] TX write failed: ${err.message}`);
