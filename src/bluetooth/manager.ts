@@ -215,26 +215,41 @@ class BluetoothManager {
         return false;
       }
 
-      // Subscribe to RX notifications
-      await this.rxChar!.startNotifications();
-      console.log(`[BLE] Subscribed to notifications on RX: ${this.rxChar!.uuid}`);
-      this.rxChar!.addEventListener('characteristicvaluechanged', (event: any) => {
-        const value = event.target.value as DataView;
-        const decoded = new TextDecoder().decode(value);
-        const hexBytes = Array.from(new Uint8Array(value.buffer))
-          .map((b) => b.toString(16).padStart(2, '0'))
-          .join(' ');
-        console.log(`[BLE] RX data: "${decoded}" | hex: ${hexBytes} | buffer: "${this.responseBuffer + decoded}"`);
-        this.responseBuffer += decoded;
+      // Subscribe to ALL notifiable characteristics to find where responses come from
+      const allServices = await server.getPrimaryServices();
+      for (const svc of allServices) {
+        try {
+          const chars = await svc.getCharacteristics();
+          for (const char of chars) {
+            if ((char as any).properties.notify || (char as any).properties.indicate) {
+              try {
+                await char.startNotifications();
+                console.log(`[BLE] Subscribed to notifications on: ${char.uuid} (service: ${svc.uuid})`);
+                char.addEventListener('characteristicvaluechanged', (event: any) => {
+                  const value = event.target.value as DataView;
+                  const decoded = new TextDecoder().decode(value);
+                  const hexBytes = Array.from(new Uint8Array(value.buffer))
+                    .map((b: number) => b.toString(16).padStart(2, '0'))
+                    .join(' ');
+                  console.log(`[BLE] RX on ${char.uuid}: "${decoded}" | hex: ${hexBytes}`);
 
-        if (this.responseBuffer.includes('>')) {
-          const response = this.responseBuffer.replace(/>/g, '').trim();
-          console.log(`[BLE] Complete response: "${response}"`);
-          this.responseBuffer = '';
-          if (this.responseTimeout) { clearTimeout(this.responseTimeout); this.responseTimeout = null; }
-          if (this.responseResolve) { const r = this.responseResolve; this.responseResolve = null; r(response); }
-        }
-      });
+                  // Feed into response buffer
+                  this.responseBuffer += decoded;
+                  if (this.responseBuffer.includes('>')) {
+                    const response = this.responseBuffer.replace(/>/g, '').trim();
+                    console.log(`[BLE] Complete response: "${response}"`);
+                    this.responseBuffer = '';
+                    if (this.responseTimeout) { clearTimeout(this.responseTimeout); this.responseTimeout = null; }
+                    if (this.responseResolve) { const r = this.responseResolve; this.responseResolve = null; r(response); }
+                  }
+                });
+              } catch (e: any) {
+                console.warn(`[BLE] Failed to subscribe to ${char.uuid}: ${e.message}`);
+              }
+            }
+          }
+        } catch { /* skip */ }
+      }
 
       // ELM327 init — log each response
       console.log('[BLE] Starting ELM327 init sequence...');
