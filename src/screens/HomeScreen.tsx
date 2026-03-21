@@ -2,10 +2,11 @@
 // HomeScreen — BT device discovery, connection, mode selection
 // ============================================================
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useThemeColors } from '../utils/hooks';
 import { useBluetoothStore } from '../store/bluetoothStore';
 import { ConnectionStatusBar } from '../components/ConnectionStatusBar';
+import { bluetoothManager } from '../bluetooth/manager';
 
 interface Props {
   onNavigate: (screen: string, params?: any) => void;
@@ -25,9 +26,18 @@ export function HomeScreen({ onNavigate }: Props) {
     clearError,
   } = useBluetoothStore();
 
+  const [isDemo, setIsDemo] = useState(bluetoothManager.isDemo);
+  const webBtAvailable = bluetoothManager.webBluetoothAvailable;
+
   const isScanning = connectionState === 'SCANNING';
   const isConnected = connectionState === 'READY' || connectionState === 'SCANNING_OBD';
   const isBusy = connectionState === 'CONNECTING' || connectionState === 'INITIALIZING';
+
+  const handleModeToggle = () => {
+    const newMode = !isDemo;
+    bluetoothManager.setDemoMode(newMode);
+    setIsDemo(newMode);
+  };
 
   const handleScanToggle = async () => {
     if (isConnected) {
@@ -55,6 +65,39 @@ export function HomeScreen({ onNavigate }: Props) {
         <p style={{ margin: '4px 0 0', fontSize: 14, color: theme.textSecondary }}>
           Connect to your vehicle adapter
         </p>
+      </div>
+
+      {/* Demo / Real Bluetooth toggle */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 14px', marginBottom: 12,
+        backgroundColor: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10,
+      }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: theme.text }}>
+            {isDemo ? 'Demo Mode' : 'Real Bluetooth'}
+          </div>
+          <div style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}>
+            {isDemo
+              ? 'Using simulated OBD2 data'
+              : webBtAvailable
+                ? 'Web Bluetooth enabled — use Chrome'
+                : 'Web Bluetooth not supported in this browser'}
+          </div>
+        </div>
+        <button
+          onClick={handleModeToggle}
+          disabled={isConnected}
+          style={{
+            padding: '6px 14px', borderRadius: 6, fontSize: 13, fontWeight: 600,
+            backgroundColor: isDemo ? theme.primary : theme.warning,
+            color: '#FFF',
+            opacity: isConnected ? 0.5 : 1,
+            cursor: isConnected ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {isDemo ? 'Use Real BT' : 'Use Demo'}
+        </button>
       </div>
 
       {/* Connection status */}
