@@ -138,12 +138,15 @@ class BluetoothManager {
       const device = await navigator.bluetooth.requestDevice({
         acceptAllDevices: true,
         optionalServices: [
+          // BlueDriver Pro proprietary services
+          '169b52a0-b7fd-40da-998c-dd9238327e55',
+          '331a36f5-2459-45ea-9d95-6142f0c4b307',
+          // Standard + common ELM327/OBD2 services
+          '0000180a-0000-1000-8000-00805f9b34fb',
           '0000fff0-0000-1000-8000-00805f9b34fb',
           '0000ffe0-0000-1000-8000-00805f9b34fb',
           '0000ffe5-0000-1000-8000-00805f9b34fb',
           'ef680100-9b35-4933-9b10-52ffa9740042',
-          '00001800-0000-1000-8000-00805f9b34fb',
-          '00001801-0000-1000-8000-00805f9b34fb',
           'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
         ],
       });
@@ -248,8 +251,10 @@ class BluetoothManager {
   }
 
   private async resolveWebCharacteristics(server: BluetoothRemoteGATTServer): Promise<boolean> {
-    // First try known OBD2 service UUIDs
+    // Try BlueDriver proprietary UUIDs first, then common OBD2 UUIDs
     const knownUUIDs = [
+      '169b52a0-b7fd-40da-998c-dd9238327e55',
+      '331a36f5-2459-45ea-9d95-6142f0c4b307',
       '0000fff0-0000-1000-8000-00805f9b34fb',
       '0000ffe0-0000-1000-8000-00805f9b34fb',
       '0000ffe5-0000-1000-8000-00805f9b34fb',
