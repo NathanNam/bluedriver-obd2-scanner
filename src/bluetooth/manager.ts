@@ -71,6 +71,7 @@ class BluetoothManager {
   private _isDemo = true;
 
   // Web Bluetooth state
+  private btDevice: BluetoothDevice | null = null;
   private gattServer: BluetoothRemoteGATTServer | null = null;
   private txChar: BluetoothRemoteGATTCharacteristic | null = null;
   private rxChar: BluetoothRemoteGATTCharacteristic | null = null;
@@ -132,20 +133,22 @@ class BluetoothManager {
     }
 
     try {
+      // Use acceptAllDevices so we don't need to know the exact service UUID upfront.
+      // optionalServices lists common OBD2/ELM327 UUIDs so we can access them after pairing.
       const device = await navigator.bluetooth.requestDevice({
-        filters: [
-          { services: ['0000fff0-0000-1000-8000-00805f9b34fb'] },
-          { namePrefix: 'BlueDr' },
-          { namePrefix: 'ELM' },
-          { namePrefix: 'OBD' },
-          { namePrefix: 'V-LINK' },
-        ],
+        acceptAllDevices: true,
         optionalServices: [
           '0000fff0-0000-1000-8000-00805f9b34fb',
           '0000ffe0-0000-1000-8000-00805f9b34fb',
+          '0000ffe5-0000-1000-8000-00805f9b34fb',
           'ef680100-9b35-4933-9b10-52ffa9740042',
+          '00001800-0000-1000-8000-00805f9b34fb',
+          '00001801-0000-1000-8000-00805f9b34fb',
+          'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
         ],
       });
+      // Store device for reuse in connect()
+      this.btDevice = device;
       this.deviceListeners.forEach((fn) => fn({
         id: device.id,
         name: device.name ?? 'OBD2 Device',
@@ -179,22 +182,14 @@ class BluetoothManager {
       return true;
     }
 
-    // Real Web Bluetooth connect
+    // Real Web Bluetooth connect — reuse device from startScan()
     try {
-      // Re-request the device to get a fresh handle with GATT access
-      const device = await navigator.bluetooth.requestDevice({
-        filters: [
-          { services: ['0000fff0-0000-1000-8000-00805f9b34fb'] },
-          { namePrefix: 'BlueDr' },
-          { namePrefix: 'ELM' },
-          { namePrefix: 'OBD' },
-        ],
-        optionalServices: [
-          '0000fff0-0000-1000-8000-00805f9b34fb',
-          '0000ffe0-0000-1000-8000-00805f9b34fb',
-          'ef680100-9b35-4933-9b10-52ffa9740042',
-        ],
-      });
+      const device = this.btDevice;
+      if (!device) {
+        this.emitError('No device selected. Scan for devices first.');
+        this.setState('ERROR');
+        return false;
+      }
 
       device.addEventListener('gattserverdisconnected', () => {
         this.gattServer = null;
@@ -253,25 +248,59 @@ class BluetoothManager {
   }
 
   private async resolveWebCharacteristics(server: BluetoothRemoteGATTServer): Promise<boolean> {
-    const serviceUUIDs = [
+    // First try known OBD2 service UUIDs
+    const knownUUIDs = [
       '0000fff0-0000-1000-8000-00805f9b34fb',
       '0000ffe0-0000-1000-8000-00805f9b34fb',
+      '0000ffe5-0000-1000-8000-00805f9b34fb',
       'ef680100-9b35-4933-9b10-52ffa9740042',
+      'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
     ];
 
-    for (const uuid of serviceUUIDs) {
+    for (const uuid of knownUUIDs) {
       try {
         const service = await server.getPrimaryService(uuid);
         const chars = await service.getCharacteristics();
+        console.log(`[BLE] Service ${uuid}: ${chars.length} characteristics`);
+        chars.forEach((c: any) => {
+          console.log(`  [BLE] Char ${c.uuid} — write:${c.properties.write} writeNoResp:${c.properties.writeWithoutResponse} notify:${c.properties.notify} indicate:${c.properties.indicate}`);
+        });
         const tx = chars.find((c: any) => c.properties.write || c.properties.writeWithoutResponse);
-        const rx = chars.find((c: any) => c.properties.notify);
+        const rx = chars.find((c: any) => c.properties.notify || c.properties.indicate);
         if (tx && rx) {
           this.txChar = tx;
           this.rxChar = rx;
+          console.log(`[BLE] Using TX: ${tx.uuid}, RX: ${rx.uuid}`);
           return true;
         }
       } catch { /* service not found, try next */ }
     }
+
+    // Fallback: enumerate all services and find any writable + notifiable pair
+    try {
+      const services = await server.getPrimaryServices();
+      console.log(`[BLE] Found ${services.length} services total`);
+      for (const service of services) {
+        console.log(`[BLE] Service: ${service.uuid}`);
+        try {
+          const chars = await service.getCharacteristics();
+          chars.forEach((c: any) => {
+            console.log(`  [BLE] Char ${c.uuid} — write:${c.properties.write} writeNoResp:${c.properties.writeWithoutResponse} notify:${c.properties.notify} indicate:${c.properties.indicate}`);
+          });
+          const tx = chars.find((c: any) => c.properties.write || c.properties.writeWithoutResponse);
+          const rx = chars.find((c: any) => c.properties.notify || c.properties.indicate);
+          if (tx && rx) {
+            this.txChar = tx;
+            this.rxChar = rx;
+            console.log(`[BLE] Fallback — Using TX: ${tx.uuid}, RX: ${rx.uuid} from service ${service.uuid}`);
+            return true;
+          }
+        } catch { /* can't read chars for this service */ }
+      }
+    } catch (err: any) {
+      console.warn(`[BLE] getPrimaryServices() failed: ${err.message}`);
+    }
+
     return false;
   }
 
@@ -279,6 +308,7 @@ class BluetoothManager {
     if (this.gattServer?.connected) {
       this.gattServer.disconnect();
     }
+    this.btDevice = null;
     this.gattServer = null;
     this.txChar = null;
     this.rxChar = null;
