@@ -215,23 +215,28 @@ class BluetoothManager {
         return false;
       }
 
-      // Subscribe to ALL notifiable characteristics to find where responses come from
+      // Subscribe to ALL notifiable characteristics across all services
+      const allWritableChars: BluetoothRemoteGATTCharacteristic[] = [];
       const allServices = await server.getPrimaryServices();
       for (const svc of allServices) {
         try {
           const chars = await svc.getCharacteristics();
           for (const char of chars) {
+            if ((char as any).properties.write || (char as any).properties.writeWithoutResponse) {
+              allWritableChars.push(char);
+            }
             if ((char as any).properties.notify || (char as any).properties.indicate) {
               try {
                 await char.startNotifications();
                 console.log(`[BLE] Subscribed to notifications on: ${char.uuid} (service: ${svc.uuid})`);
                 char.addEventListener('characteristicvaluechanged', (event: any) => {
                   const value = event.target.value as DataView;
+                  const bytes = new Uint8Array(value.buffer);
                   const decoded = new TextDecoder().decode(value);
-                  const hexBytes = Array.from(new Uint8Array(value.buffer))
+                  const hexBytes = Array.from(bytes)
                     .map((b: number) => b.toString(16).padStart(2, '0'))
                     .join(' ');
-                  console.log(`[BLE] RX on ${char.uuid}: "${decoded}" | hex: ${hexBytes}`);
+                  console.log(`[BLE] RX on ${char.uuid}: hex=[${hexBytes}] ascii="${decoded}" len=${bytes.length}`);
 
                   // Feed into response buffer
                   this.responseBuffer += decoded;
@@ -251,18 +256,62 @@ class BluetoothManager {
         } catch { /* skip */ }
       }
 
-      // ELM327 init — log each response
-      console.log('[BLE] Starting ELM327 init sequence...');
-      for (const cmd of ['ATZ', 'ATE0', 'ATL0', 'ATH0', 'ATSP0']) {
+      // Step 1: Passive listen — wait 5 seconds after connect to see if
+      // the adapter sends any unsolicited data (banner, prompt, etc.)
+      console.log('[BLE] Waiting 5 seconds for unsolicited data...');
+      await this.delay(5000);
+      if (this.responseBuffer.length > 0) {
+        console.log(`[BLE] Unsolicited data received: "${this.responseBuffer}"`);
+        this.responseBuffer = '';
+      } else {
+        console.log('[BLE] No unsolicited data received.');
+      }
+
+      // Step 2: Send a bare \r to see if we get a prompt
+      console.log('[BLE] Sending bare \\r to probe for prompt...');
+      for (const txChar of allWritableChars) {
+        try {
+          const crData = new TextEncoder().encode('\r');
+          const writeOp = (txChar as any).properties.writeWithoutResponse
+            ? txChar.writeValueWithoutResponse(crData)
+            : txChar.writeValueWithResponse(crData);
+          await writeOp;
+          console.log(`[BLE] Bare \\r sent on ${txChar.uuid} — waiting 3s for response...`);
+          await this.delay(3000);
+          if (this.responseBuffer.length > 0) {
+            console.log(`[BLE] Got response on ${txChar.uuid}: "${this.responseBuffer}"`);
+            // This is the right TX characteristic!
+            this.txChar = txChar;
+            this.responseBuffer = '';
+            break;
+          } else {
+            console.log(`[BLE] No response from ${txChar.uuid}`);
+          }
+        } catch (e: any) {
+          console.log(`[BLE] Write to ${txChar.uuid} failed: ${e.message}`);
+        }
+      }
+
+      // Step 3: Send ATZ with longer timeout after delay
+      console.log('[BLE] Sending ATZ (with 2s post-delay)...');
+      await this.delay(1000);
+      const atzResp = await this.sendCommand('ATZ', 10000);
+      console.log(`[BLE] ATZ response: "${atzResp}"`);
+      await this.delay(2000); // ATZ causes adapter reset, give it time
+
+      // Step 4: Continue init
+      for (const cmd of ['ATE0', 'ATL0', 'ATH0', 'ATSP0']) {
         console.log(`[BLE] Sending: ${cmd}`);
         const resp = await this.sendCommand(cmd, 8000);
         console.log(`[BLE] Response to ${cmd}: "${resp}"`);
+        await this.delay(300);
       }
+
       console.log('[BLE] Sending: 0100');
-      const pidCheck = await this.sendCommand('0100', 8000);
+      const pidCheck = await this.sendCommand('0100', 10000);
       console.log(`[BLE] Response to 0100: "${pidCheck}"`);
       if (!pidCheck.includes('41 00') && !pidCheck.includes('4100')) {
-        this.emitError('ECU not responding');
+        this.emitError('ECU not responding — check console for debug details');
         this.setState('ERROR');
         return false;
       }
