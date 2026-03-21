@@ -217,24 +217,35 @@ class BluetoothManager {
 
       // Subscribe to RX notifications
       await this.rxChar!.startNotifications();
+      console.log(`[BLE] Subscribed to notifications on RX: ${this.rxChar!.uuid}`);
       this.rxChar!.addEventListener('characteristicvaluechanged', (event: any) => {
         const value = event.target.value as DataView;
         const decoded = new TextDecoder().decode(value);
+        const hexBytes = Array.from(new Uint8Array(value.buffer))
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join(' ');
+        console.log(`[BLE] RX data: "${decoded}" | hex: ${hexBytes} | buffer: "${this.responseBuffer + decoded}"`);
         this.responseBuffer += decoded;
 
         if (this.responseBuffer.includes('>')) {
           const response = this.responseBuffer.replace(/>/g, '').trim();
+          console.log(`[BLE] Complete response: "${response}"`);
           this.responseBuffer = '';
           if (this.responseTimeout) { clearTimeout(this.responseTimeout); this.responseTimeout = null; }
           if (this.responseResolve) { const r = this.responseResolve; this.responseResolve = null; r(response); }
         }
       });
 
-      // ELM327 init
+      // ELM327 init — log each response
+      console.log('[BLE] Starting ELM327 init sequence...');
       for (const cmd of ['ATZ', 'ATE0', 'ATL0', 'ATH0', 'ATSP0']) {
-        await this.sendCommand(cmd, 8000);
+        console.log(`[BLE] Sending: ${cmd}`);
+        const resp = await this.sendCommand(cmd, 8000);
+        console.log(`[BLE] Response to ${cmd}: "${resp}"`);
       }
+      console.log('[BLE] Sending: 0100');
       const pidCheck = await this.sendCommand('0100', 8000);
+      console.log(`[BLE] Response to 0100: "${pidCheck}"`);
       if (!pidCheck.includes('41 00') && !pidCheck.includes('4100')) {
         this.emitError('ECU not responding');
         this.setState('ERROR');
@@ -348,8 +359,13 @@ class BluetoothManager {
         resolve('');
       }, timeout);
 
-      const data = new TextEncoder().encode(terminateCommand(command));
-      this.txChar!.writeValue(data).catch(() => {
+      const cmdStr = terminateCommand(command);
+      const data = new TextEncoder().encode(cmdStr);
+      console.log(`[BLE] TX write: "${command}" (${data.length} bytes)`);
+      this.txChar!.writeValue(data).then(() => {
+        console.log(`[BLE] TX write success`);
+      }).catch((err: any) => {
+        console.error(`[BLE] TX write failed: ${err.message}`);
         if (this.responseTimeout) { clearTimeout(this.responseTimeout); this.responseTimeout = null; }
         this.responseResolve = null;
         resolve('');
