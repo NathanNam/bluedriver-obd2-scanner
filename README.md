@@ -3,7 +3,7 @@
 A web app that connects to your vehicle's OBD2 port via a BlueDriver Pro or ELM327 Bluetooth adapter — directly from your browser using the Web Bluetooth API. Read diagnostic trouble codes in plain English, monitor real-time engine data on configurable gauges, and export scan reports.
 
 <p align="center">
-  <img src="docs/screenshot-home.png" alt="Home screen — connected to BlueDriver Pro" width="300" />
+  <img src="docs/screenshot-home.png" alt="Scan results — DTCs, VIN, freeze frame data with desktop sidebar layout" width="700" />
 </p>
 
 ## Features
