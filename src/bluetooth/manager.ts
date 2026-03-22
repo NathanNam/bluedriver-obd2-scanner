@@ -131,7 +131,7 @@ class BluetoothManager {
 
     if (this._isDemo) {
       await this.delay(800);
-      this.deviceListeners.forEach((fn) => fn({ id: 'DEMO-BLUEDRIVER-001', name: 'BlueDriver Pro (Demo)', rssi: -45 }));
+      this.deviceListeners.forEach((fn) => fn({ id: 'DEMO-VEEPEAK-001', name: 'Veepeak BLE+ (Demo)', rssi: -45 }));
       await this.delay(400);
       this.deviceListeners.forEach((fn) => fn({ id: 'DEMO-ELM327-002', name: 'ELM327 OBD-II (Demo)', rssi: -62 }));
       return;
@@ -176,7 +176,7 @@ class BluetoothManager {
     if (this._isDemo) {
       await this.delay(600);
       this.setState('INITIALIZING');
-      this._connectedDeviceName = deviceId.includes('BLUEDRIVER') ? 'BlueDriver Pro (Demo)' : 'ELM327 OBD-II (Demo)';
+      this._connectedDeviceName = deviceId.includes('VEEPEAK') ? 'Veepeak BLE+ (Demo)' : 'ELM327 OBD-II (Demo)';
       await this.delay(800);
       this.setState('READY');
       return true;
