@@ -171,37 +171,41 @@ export function LiveScreen() {
       {/* Header Bar */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '12px 24px', backgroundColor: theme.surface, borderBottom: `1px solid ${theme.border}`,
+        padding: '8px 24px', backgroundColor: theme.surface, borderBottom: `1px solid ${theme.border}`,
+        gap: 12, flexWrap: 'wrap',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: isPolling ? theme.connected : theme.idle }} />
-          <span style={{ fontSize: 16, fontWeight: 600, color: theme.text }}>{isPolling ? 'Live' : 'Paused'}</span>
-        </div>
-        {isPolling && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 15, color: theme.textSecondary, fontVariantNumeric: 'tabular-nums' }}>
-              {formatElapsed(elapsedTime)}
-            </span>
-            <span style={{
-              fontSize: 11, color: theme.textTertiary, fontVariantNumeric: 'tabular-nums',
-              backgroundColor: theme.surfaceSecondary, padding: '2px 8px', borderRadius: 4,
-            }}>
-              {refreshRate} Hz
-            </span>
+        {/* Left: status + time + hz */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: isPolling ? theme.connected : theme.idle }} />
+            <span style={{ fontSize: 14, fontWeight: 600, color: theme.text }}>{isPolling ? 'Live' : 'Paused'}</span>
           </div>
-        )}
-        <NewtonIndicator
-          healthResult={newtonStatus.healthResult}
-          newtonResult={newtonStatus.newtonResult}
-          newtonConnected={newtonStatus.newtonConnected}
-          newtonAvailable={newton.available}
-          polling={isPolling}
-        />
-        <button
-          onClick={handleToggleRecording}
-          disabled={!isPolling}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 4, padding: '5px 12px', borderRadius: 6,
+          {isPolling && (
+            <>
+              <span style={{ fontSize: 13, color: theme.textSecondary, fontVariantNumeric: 'tabular-nums' }}>
+                {formatElapsed(elapsedTime)}
+              </span>
+              <span style={{ fontSize: 10, color: theme.textTertiary, fontVariantNumeric: 'tabular-nums' }}>
+                {refreshRate} Hz
+              </span>
+            </>
+          )}
+        </div>
+
+        {/* Right: indicators + REC */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <NewtonIndicator
+            healthResult={newtonStatus.healthResult}
+            newtonResult={newtonStatus.newtonResult}
+            newtonConnected={newtonStatus.newtonConnected}
+            newtonAvailable={newton.available}
+            polling={isPolling}
+          />
+          <button
+            onClick={handleToggleRecording}
+            disabled={!isPolling}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 6,
             border: `1px solid ${isRecording ? theme.critical : theme.border}`,
             backgroundColor: isRecording ? theme.critical : theme.surfaceSecondary,
             cursor: isPolling ? 'pointer' : 'not-allowed', opacity: isPolling ? 1 : 0.5,
@@ -211,7 +215,8 @@ export function LiveScreen() {
           <span style={{ fontSize: 12, fontWeight: 600, color: isRecording ? '#FFF' : theme.text }}>
             {isRecording ? 'Stop' : 'REC'}
           </span>
-        </button>
+          </button>
+        </div>
       </div>
 
       {/* Alert Banner */}
