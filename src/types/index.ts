@@ -78,6 +78,25 @@ export interface ScanResult {
   rawLog: RawLogEntry[];
 }
 
+// --- Live Scan Stats & Alerts ---
+
+export interface PIDStats {
+  min: number;
+  max: number;
+  sum: number;
+  count: number;
+  avg: number;
+}
+
+export interface PIDAlert {
+  pid: string;
+  name: string;
+  value: number;
+  threshold: number;
+  unit: string;
+  timestamp: number;
+}
+
 // --- Live Scan ---
 
 export interface PIDDefinition {

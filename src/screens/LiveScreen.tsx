@@ -21,6 +21,7 @@ export function LiveScreen() {
   const {
     isPolling, gaugeConfig, currentValues, chartData, unsupportedPIDs,
     isRecording, startPolling, stopPolling, setGaugePID, startRecording, stopRecording,
+    pidStats, refreshRate, activeAlerts,
   } = useLiveStore();
 
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -111,9 +112,17 @@ export function LiveScreen() {
           <span style={{ fontSize: 16, fontWeight: 600, color: theme.text }}>{isPolling ? 'Live' : 'Paused'}</span>
         </div>
         {isPolling && (
-          <span style={{ fontSize: 15, color: theme.textSecondary, fontVariantNumeric: 'tabular-nums' }}>
-            {formatElapsed(elapsedTime)}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 15, color: theme.textSecondary, fontVariantNumeric: 'tabular-nums' }}>
+              {formatElapsed(elapsedTime)}
+            </span>
+            <span style={{
+              fontSize: 11, color: theme.textTertiary, fontVariantNumeric: 'tabular-nums',
+              backgroundColor: theme.surfaceSecondary, padding: '2px 8px', borderRadius: 4,
+            }}>
+              {refreshRate} Hz
+            </span>
+          </div>
         )}
         <button
           onClick={handleToggleRecording}
@@ -131,6 +140,23 @@ export function LiveScreen() {
           </span>
         </button>
       </div>
+
+      {/* Alert Banner */}
+      {Object.keys(activeAlerts).length > 0 && (
+        <div style={{
+          margin: '8px 24px 0', padding: '8px 12px',
+          backgroundColor: theme.critical + '15', border: `1px solid ${theme.critical}`, borderRadius: 8,
+        }}>
+          {Object.values(activeAlerts).map((alert) => (
+            <div key={alert.pid} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0' }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: theme.critical }}>{alert.name} alert</span>
+              <span style={{ fontSize: 13, color: theme.critical, fontVariantNumeric: 'tabular-nums' }}>
+                {Math.round(alert.value)} {alert.unit} (limit: {alert.threshold})
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* 2x2 Gauge Grid */}
       <div style={{
@@ -151,6 +177,8 @@ export function LiveScreen() {
               definition={def}
               size={gaugeSize}
               onPress={() => handleGaugePress(config.slotIndex)}
+              stats={pidStats[config.pid] ?? null}
+              isCritical={!!activeAlerts[config.pid]}
             />
           );
         })}
@@ -158,6 +186,56 @@ export function LiveScreen() {
 
       {/* Chart Strip */}
       {renderChart()}
+
+      {/* Numerical Data Table */}
+      {isPolling && Object.keys(currentValues).length > 0 && (
+        <div style={{
+          margin: '0 24px 16px', padding: 12,
+          backgroundColor: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10,
+          maxHeight: 300, overflowY: 'auto',
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: theme.textSecondary, marginBottom: 8, paddingBottom: 6, borderBottom: `1px solid ${theme.border}` }}>
+            All Parameters
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: 4, padding: '4px 0', fontSize: 10, fontWeight: 600, color: theme.textTertiary, borderBottom: `1px solid ${theme.border}`, marginBottom: 4 }}>
+            <span>Parameter</span>
+            <span style={{ textAlign: 'right' }}>Current</span>
+            <span style={{ textAlign: 'right' }}>Min</span>
+            <span style={{ textAlign: 'right' }}>Max</span>
+            <span style={{ textAlign: 'right' }}>Avg</span>
+          </div>
+          {getAllPIDs()
+            .filter((def) => !unsupportedPIDs.has(def.pid))
+            .map((def) => {
+              const val = currentValues[def.pid];
+              const stats = pidStats[def.pid];
+              const isAlert = !!activeAlerts[def.pid];
+              return (
+                <div key={def.pid} style={{
+                  display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: 4, padding: '6px 0',
+                  borderBottom: `1px solid ${theme.border}`, backgroundColor: isAlert ? theme.critical + '10' : 'transparent', fontSize: 13,
+                }}>
+                  <span style={{ color: theme.text, fontWeight: 500 }}>
+                    {def.shortName}
+                    <span style={{ color: theme.textTertiary, fontSize: 10, marginLeft: 4 }}>{def.unit}</span>
+                  </span>
+                  <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: isAlert ? theme.critical : theme.text, fontWeight: 600 }}>
+                    {val ? Math.round(val.value) : '--'}
+                  </span>
+                  <span style={{ textAlign: 'right', color: theme.textSecondary, fontVariantNumeric: 'tabular-nums' }}>
+                    {stats ? Math.round(stats.min) : '--'}
+                  </span>
+                  <span style={{ textAlign: 'right', color: theme.textSecondary, fontVariantNumeric: 'tabular-nums' }}>
+                    {stats ? Math.round(stats.max) : '--'}
+                  </span>
+                  <span style={{ textAlign: 'right', color: theme.textSecondary, fontVariantNumeric: 'tabular-nums' }}>
+                    {stats ? Math.round(stats.avg) : '--'}
+                  </span>
+                </div>
+              );
+            })}
+        </div>
+      )}
 
       <div style={{ flex: 1 }} />
 

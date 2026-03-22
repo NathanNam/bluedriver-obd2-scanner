@@ -3,7 +3,7 @@
 // ============================================================
 
 import { create } from 'zustand';
-import { GaugeConfig, LiveDataPoint, ParsedPID, RecordingSession } from '../types';
+import { GaugeConfig, LiveDataPoint, ParsedPID, RecordingSession, PIDStats, PIDAlert } from '../types';
 import { bluetoothManager } from '../bluetooth/manager';
 import { buildMode01Command } from '../obd2/commands';
 import { parseRawResponse, isNoData } from '../obd2/parser';
@@ -13,10 +13,13 @@ const DEFAULT_GAUGE_CONFIG: GaugeConfig[] = [
   { slotIndex: 0, pid: '0C' }, // RPM
   { slotIndex: 1, pid: '0D' }, // Speed
   { slotIndex: 2, pid: '05' }, // Coolant Temp
-  { slotIndex: 3, pid: '04' }, // Engine Load
+  { slotIndex: 3, pid: '2F' }, // Fuel Tank Level
 ];
 
-const CHART_WINDOW_MS = 60000; // 60 seconds rolling window
+const CHART_WINDOW_MS = 60000;
+
+// PIDs to poll at full rate (gauge PIDs). Others poll every Nth cycle.
+const SECONDARY_POLL_INTERVAL = 3;
 
 interface LiveStore {
   isPolling: boolean;
@@ -24,6 +27,11 @@ interface LiveStore {
   currentValues: Record<string, ParsedPID>;
   chartData: LiveDataPoint[];
   unsupportedPIDs: Set<string>;
+
+  // Stats & monitoring
+  pidStats: Record<string, PIDStats>;
+  refreshRate: number;
+  activeAlerts: Record<string, PIDAlert>;
 
   // Recording
   isRecording: boolean;
@@ -40,6 +48,8 @@ interface LiveStore {
 
 let pollingActive = false;
 let pollingTimeout: ReturnType<typeof setTimeout> | null = null;
+let cycleCount = 0;
+let cycleTimestamps: number[] = [];
 
 function generateId(): string {
   return `rec_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -53,9 +63,16 @@ export const useLiveStore = create<LiveStore>((set, get) => {
     }
 
     const state = get();
-    const activePIDs = state.gaugeConfig.map((g) => g.pid);
+    const gaugePIDs = new Set(state.gaugeConfig.map((g) => g.pid));
 
-    for (const pid of activePIDs) {
+    // Build PID list: gauge PIDs every cycle, others every Nth cycle
+    const allPIDs = getAllPIDs().map((def) => def.pid);
+    const pidsThisCycle = allPIDs.filter((pid) => {
+      if (gaugePIDs.has(pid)) return true;
+      return cycleCount % SECONDARY_POLL_INTERVAL === 0;
+    });
+
+    for (const pid of pidsThisCycle) {
       if (!pollingActive) break;
       if (state.unsupportedPIDs.has(pid)) continue;
 
@@ -64,7 +81,6 @@ export const useLiveStore = create<LiveStore>((set, get) => {
         const raw = await bluetoothManager.sendCommandWithRetry(command, 3000);
 
         if (isNoData(raw)) {
-          // Mark PID as unsupported
           set((s) => ({
             unsupportedPIDs: new Set([...s.unsupportedPIDs, pid]),
           }));
@@ -80,46 +96,84 @@ export const useLiveStore = create<LiveStore>((set, get) => {
           };
 
           set((s) => {
-            const newCurrentValues = {
-              ...s.currentValues,
-              [parsed.pid]: parsed,
-            };
+            const newCurrentValues = { ...s.currentValues, [parsed.pid]: parsed };
 
-            // Update chart data (primary gauge only — slot 0)
+            // Chart data (primary gauge)
             const primaryPID = s.gaugeConfig[0]?.pid;
             let newChartData = s.chartData;
             if (parsed.pid === primaryPID) {
               const cutoff = Date.now() - CHART_WINDOW_MS;
-              newChartData = [
-                ...s.chartData.filter((d) => d.timestamp > cutoff),
-                dataPoint,
-              ];
+              newChartData = [...s.chartData.filter((d) => d.timestamp > cutoff), dataPoint];
             }
 
-            // Append to recording if active
+            // Recording
             let newRecording = s.currentRecording;
             if (s.isRecording && newRecording) {
-              newRecording = {
-                ...newRecording,
-                dataPoints: [...newRecording.dataPoints, dataPoint],
+              newRecording = { ...newRecording, dataPoints: [...newRecording.dataPoints, dataPoint] };
+            }
+
+            // Min/Max/Avg stats
+            const existing = s.pidStats[parsed.pid];
+            let newStats: PIDStats;
+            if (existing) {
+              const newCount = existing.count + 1;
+              const newSum = existing.sum + parsed.value;
+              newStats = {
+                min: Math.min(existing.min, parsed.value),
+                max: Math.max(existing.max, parsed.value),
+                sum: newSum,
+                count: newCount,
+                avg: newSum / newCount,
               };
+            } else {
+              newStats = { min: parsed.value, max: parsed.value, sum: parsed.value, count: 1, avg: parsed.value };
+            }
+            const newPidStats = { ...s.pidStats, [parsed.pid]: newStats };
+
+            // Alert thresholds
+            const def = PID_REGISTRY[parsed.pid];
+            const newAlerts = { ...s.activeAlerts };
+            if (def?.criticalThreshold !== undefined) {
+              const isCritical = def.pid === '2F'
+                ? parsed.value <= def.criticalThreshold
+                : parsed.value >= def.criticalThreshold;
+              if (isCritical) {
+                newAlerts[parsed.pid] = {
+                  pid: parsed.pid,
+                  name: def.shortName,
+                  value: parsed.value,
+                  threshold: def.criticalThreshold,
+                  unit: def.unit,
+                  timestamp: Date.now(),
+                };
+              } else {
+                delete newAlerts[parsed.pid];
+              }
             }
 
             return {
               currentValues: newCurrentValues,
               chartData: newChartData,
               currentRecording: newRecording,
+              pidStats: newPidStats,
+              activeAlerts: newAlerts,
             };
           });
         }
       } catch {
-        // Skip this PID on error, continue polling
+        // Skip this PID on error
       }
     }
 
-    // Schedule next cycle
+    // Refresh rate: track cycle completions
+    cycleCount++;
+    const now = Date.now();
+    cycleTimestamps = [...cycleTimestamps.filter((t) => t > now - 5000), now];
+    const refreshRate = Math.round((cycleTimestamps.length / 5) * 10) / 10; // avg cycles/sec over 5s window
+    set({ refreshRate });
+
     if (pollingActive) {
-      pollingTimeout = setTimeout(pollCycle, 50); // Minimal delay between cycles
+      pollingTimeout = setTimeout(pollCycle, 50);
     }
   };
 
@@ -129,6 +183,9 @@ export const useLiveStore = create<LiveStore>((set, get) => {
     currentValues: {},
     chartData: [],
     unsupportedPIDs: new Set<string>(),
+    pidStats: {},
+    refreshRate: 0,
+    activeAlerts: {},
 
     isRecording: false,
     currentRecording: null,
@@ -137,53 +194,44 @@ export const useLiveStore = create<LiveStore>((set, get) => {
     startPolling: () => {
       if (pollingActive) return;
       pollingActive = true;
-      set({ isPolling: true, unsupportedPIDs: new Set() });
+      cycleCount = 0;
+      cycleTimestamps = [];
+      set({
+        isPolling: true,
+        unsupportedPIDs: new Set(),
+        pidStats: {},
+        refreshRate: 0,
+        activeAlerts: {},
+      });
 
-      // Send live mode init commands
       (async () => {
         try {
-          await bluetoothManager.sendCommand('ATH1'); // Headers on
-          await bluetoothManager.sendCommand('ATAT1'); // Adaptive timing
-        } catch {
-          // Non-critical
-        }
+          await bluetoothManager.sendCommand('ATH1');
+          await bluetoothManager.sendCommand('ATAT1');
+        } catch { /* Non-critical */ }
         pollCycle();
       })();
     },
 
     stopPolling: () => {
       pollingActive = false;
-      if (pollingTimeout) {
-        clearTimeout(pollingTimeout);
-        pollingTimeout = null;
-      }
+      if (pollingTimeout) { clearTimeout(pollingTimeout); pollingTimeout = null; }
       set({ isPolling: false });
 
-      // Restore headers off
       (async () => {
-        try {
-          await bluetoothManager.sendCommand('ATH0');
-        } catch {
-          // Non-critical
-        }
+        try { await bluetoothManager.sendCommand('ATH0'); } catch { /* Non-critical */ }
       })();
     },
 
     setGaugePID: (slotIndex: number, pid: string) => {
       set((state) => ({
-        gaugeConfig: state.gaugeConfig.map((g) =>
-          g.slotIndex === slotIndex ? { ...g, pid } : g
-        ),
+        gaugeConfig: state.gaugeConfig.map((g) => g.slotIndex === slotIndex ? { ...g, pid } : g),
       }));
     },
 
     startRecording: () => {
       const session: RecordingSession = {
-        id: generateId(),
-        startTime: Date.now(),
-        endTime: null,
-        vin: null,
-        dataPoints: [],
+        id: generateId(), startTime: Date.now(), endTime: null, vin: null, dataPoints: [],
       };
       set({ isRecording: true, currentRecording: session });
     },
@@ -191,15 +239,8 @@ export const useLiveStore = create<LiveStore>((set, get) => {
     stopRecording: () => {
       const state = get();
       if (state.currentRecording) {
-        const completed = {
-          ...state.currentRecording,
-          endTime: Date.now(),
-        };
-        set((s) => ({
-          isRecording: false,
-          currentRecording: null,
-          recordings: [completed, ...s.recordings],
-        }));
+        const completed = { ...state.currentRecording, endTime: Date.now() };
+        set((s) => ({ isRecording: false, currentRecording: null, recordings: [completed, ...s.recordings] }));
       } else {
         set({ isRecording: false });
       }
