@@ -166,6 +166,7 @@ export function parseDTCs(raw: string, mode: 'stored' | 'pending' | 'permanent')
 
     const parts = cleaned.split(/\s+/).filter((p) => p.length > 0);
     const dtcs: DTC[] = [];
+    const seenCodes = new Set<string>();
 
     // Find response prefix and parse byte pairs
     let i = 0;
@@ -183,6 +184,12 @@ export function parseDTCs(raw: string, mode: 'stored' | 'pending' | 'permanent')
             continue;
           }
           const code = decodeDTCCode(b1, b2);
+          // Deduplicate — multi-frame responses can repeat the prefix
+          if (seenCodes.has(code)) {
+            i += 2;
+            continue;
+          }
+          seenCodes.add(code);
           const description = lookupDTC(code);
           dtcs.push({
             code,
@@ -211,10 +218,9 @@ export function parseVIN(raw: string): string | null {
     const cleaned = cleanResponse(raw);
     if (isNoData(cleaned) || isError(cleaned)) return null;
 
-    // VIN response: "49 02 01 XX XX XX XX ..." spanning multiple lines
     const parts = cleaned.split(/\s+/).filter((p) => p.length > 0);
 
-    // Find "49 02" prefix and extract data bytes
+    // Collect all data bytes after "49 02" prefixes, skipping headers
     const vinBytes: number[] = [];
     let i = 0;
     while (i < parts.length) {
@@ -223,11 +229,18 @@ export function parseVIN(raw: string): string | null {
         i + 1 < parts.length &&
         parts[i + 1].toUpperCase() === '02'
       ) {
-        i += 3; // skip 49 02 XX (sequence number)
-        // Collect remaining bytes until next prefix or end
+        i += 2; // skip 49 02
+        // Skip the sequence/count byte (01, 02, 03, etc.)
+        if (i < parts.length) {
+          const seqByte = parseInt(parts[i], 16);
+          if (!isNaN(seqByte) && seqByte <= 0x20) {
+            i++; // skip sequence byte
+          }
+        }
+        // Collect data bytes until next 49 prefix or end
         while (i < parts.length && parts[i].toUpperCase() !== '49') {
           const byte = parseInt(parts[i], 16);
-          if (!isNaN(byte) && byte > 0) {
+          if (!isNaN(byte)) {
             vinBytes.push(byte);
           }
           i++;
@@ -239,9 +252,14 @@ export function parseVIN(raw: string): string | null {
 
     if (vinBytes.length === 0) return null;
 
-    const vin = vinBytes.map((b) => String.fromCharCode(b)).join('');
+    // Convert to ASCII, keeping only printable characters (0x20-0x7E)
+    const vin = vinBytes
+      .filter((b) => b >= 0x20 && b <= 0x7E)
+      .map((b) => String.fromCharCode(b))
+      .join('');
+
     // VIN should be 17 characters
-    return vin.length >= 17 ? vin.substring(0, 17) : vin;
+    return vin.length >= 17 ? vin.substring(0, 17) : vin.length > 0 ? vin : null;
   } catch {
     return null;
   }
