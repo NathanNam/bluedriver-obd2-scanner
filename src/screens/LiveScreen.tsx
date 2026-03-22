@@ -37,6 +37,7 @@ export function LiveScreen() {
   // Newton AI
   const newton = useNewtonChat();
   const newtonStatus = useNewtonStatus({
+    available: newton.available,
     polling: isPolling,
     currentValues,
     pidStats,
@@ -184,7 +185,13 @@ export function LiveScreen() {
             </span>
           </div>
         )}
-        <NewtonIndicator result={newtonStatus.result} polling={isPolling} />
+        <NewtonIndicator
+          healthResult={newtonStatus.healthResult}
+          newtonResult={newtonStatus.newtonResult}
+          newtonConnected={newtonStatus.newtonConnected}
+          newtonAvailable={newton.available}
+          polling={isPolling}
+        />
         <button
           onClick={handleToggleRecording}
           disabled={!isPolling}
