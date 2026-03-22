@@ -98,13 +98,12 @@ export const useLiveStore = create<LiveStore>((set, get) => {
           set((s) => {
             const newCurrentValues = { ...s.currentValues, [parsed.pid]: parsed };
 
-            // Chart data (primary gauge)
-            const primaryPID = s.gaugeConfig[0]?.pid;
-            let newChartData = s.chartData;
-            if (parsed.pid === primaryPID) {
-              const cutoff = Date.now() - CHART_WINDOW_MS;
-              newChartData = [...s.chartData.filter((d) => d.timestamp > cutoff), dataPoint];
-            }
+            // Chart data — store for ALL PIDs
+            const cutoff = Date.now() - CHART_WINDOW_MS;
+            const newChartData = [
+              ...s.chartData.filter((d) => d.timestamp > cutoff),
+              dataPoint,
+            ];
 
             // Recording
             let newRecording = s.currentRecording;
