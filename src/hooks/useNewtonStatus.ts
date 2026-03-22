@@ -1,113 +1,100 @@
 import { useState, useEffect, useRef } from 'react';
+import { ParsedPID, PIDStats } from '../types';
+import { PID_REGISTRY } from '../obd2/pids';
 
 export interface NewtonStatusResult {
-  label: string;
+  label: 'normal' | 'attention';
   confidence: number;
-  scores: Record<string, number>;
-  windows: number;
+  issues: string[];
   timestamp: number;
 }
 
 interface UseNewtonStatusOptions {
-  available: boolean;
   polling: boolean;
-  currentValues: Record<string, { value: number; timestamp: number }>;
+  currentValues: Record<string, ParsedPID>;
+  pidStats: Record<string, PIDStats>;
+  activeAlerts: Record<string, any>;
 }
 
-export function useNewtonStatus({ available, polling, currentValues }: UseNewtonStatusOptions) {
+/**
+ * Local health analysis based on OBD2 thresholds.
+ * Runs every 5 seconds while polling is active.
+ * No API calls — instant, reliable, works offline.
+ */
+export function useNewtonStatus({ polling, currentValues, pidStats, activeAlerts }: UseNewtonStatusOptions) {
   const [result, setResult] = useState<NewtonStatusResult | null>(null);
-  const [connected, setConnected] = useState(false);
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const flushIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startedRef = useRef(false);
-  const currentValuesRef = useRef(currentValues);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Keep ref in sync without causing effect re-runs
-  currentValuesRef.current = currentValues;
-
-  // Manage stream lifecycle based on available + polling
   useEffect(() => {
-    if (!available || !polling) {
-      if (startedRef.current) {
-        fetch('/api/newton/stream/stop', { method: 'POST' }).catch(() => {});
-        startedRef.current = false;
-      }
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-        setConnected(false);
-      }
-      if (flushIntervalRef.current) {
-        clearInterval(flushIntervalRef.current);
-        flushIntervalRef.current = null;
-      }
+    if (!polling) {
+      setResult(null);
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
       return;
     }
 
-    // Start stream
-    if (!startedRef.current) {
-      fetch('/api/newton/stream/start', { method: 'POST' }).catch(() => {});
-      startedRef.current = true;
-    }
+    const analyze = () => {
+      if (Object.keys(currentValues).length === 0) return;
 
-    // Connect to SSE
-    if (!eventSourceRef.current) {
-      const es = new EventSource('/api/newton/stream');
-      es.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          setResult(data);
-        } catch {}
-      };
-      es.onopen = () => setConnected(true);
-      es.onerror = () => setConnected(false);
-      eventSourceRef.current = es;
-    }
+      const issues: string[] = [];
 
-    // Send PID snapshot every 1 second (Newton needs 32+ data points to start analyzing)
-    if (!flushIntervalRef.current) {
-      flushIntervalRef.current = setInterval(() => {
-        const vals = currentValuesRef.current;
-        if (!vals || Object.keys(vals).length === 0) return;
+      // Check each PID against thresholds
+      for (const [pid, parsed] of Object.entries(currentValues)) {
+        const def = PID_REGISTRY[pid];
+        if (!def) continue;
+        const v = parsed.value;
 
-        const values: Record<string, number> = {};
-        for (const [pid, parsed] of Object.entries(vals)) {
-          values[pid] = (parsed as any).value ?? parsed;
+        // Critical thresholds
+        if (def.criticalThreshold !== undefined) {
+          if (pid === '2F') {
+            // Fuel: low is bad
+            if (v <= def.criticalThreshold) issues.push(`${def.shortName} critically low (${Math.round(v)}${def.unit})`);
+            else if (def.cautionThreshold && v <= def.cautionThreshold) issues.push(`${def.shortName} low (${Math.round(v)}${def.unit})`);
+          } else {
+            if (v >= def.criticalThreshold) issues.push(`${def.shortName} critical (${Math.round(v)}${def.unit})`);
+            else if (def.cautionThreshold && v >= def.cautionThreshold) issues.push(`${def.shortName} high (${Math.round(v)}${def.unit})`);
+          }
         }
+      }
 
-        fetch('/api/newton/stream/data', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ timestamp: Date.now(), values }),
-        }).catch(() => {});
-      }, 1000);
-    }
+      // Check fuel trims — lean/rich condition
+      const stft = currentValues['06'];
+      const ltft = currentValues['07'];
+      if (stft && Math.abs(stft.value) > 20) issues.push(`Short-term fuel trim extreme (${stft.value.toFixed(1)}%)`);
+      if (ltft && Math.abs(ltft.value) > 15) issues.push(`Long-term fuel trim high (${ltft.value.toFixed(1)}%)`);
+
+      // Check for erratic RPM (high variance in stats)
+      const rpmStats = pidStats['0C'];
+      if (rpmStats && rpmStats.count > 10) {
+        const rpmRange = rpmStats.max - rpmStats.min;
+        if (rpmRange > 2000 && rpmStats.avg < 1500) {
+          issues.push('RPM unstable at idle');
+        }
+      }
+
+      // Any active alerts from the threshold system
+      const alertCount = Object.keys(activeAlerts).length;
+
+      const hasIssues = issues.length > 0 || alertCount > 0;
+      const confidence = hasIssues
+        ? Math.min(95, 50 + issues.length * 15)
+        : Math.min(95, 70 + Object.keys(currentValues).length * 2);
+
+      setResult({
+        label: hasIssues ? 'attention' : 'normal',
+        confidence,
+        issues,
+        timestamp: Date.now(),
+      });
+    };
+
+    // Analyze immediately and then every 5 seconds
+    analyze();
+    intervalRef.current = setInterval(analyze, 5000);
 
     return () => {
-      if (flushIntervalRef.current) {
-        clearInterval(flushIntervalRef.current);
-        flushIntervalRef.current = null;
-      }
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     };
-  }, [available, polling]); // Only re-run when these change, NOT on currentValues
+  }, [polling, currentValues, pidStats, activeAlerts]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-      if (startedRef.current) {
-        fetch('/api/newton/stream/stop', { method: 'POST' }).catch(() => {});
-        startedRef.current = false;
-      }
-      if (flushIntervalRef.current) {
-        clearInterval(flushIntervalRef.current);
-        flushIntervalRef.current = null;
-      }
-    };
-  }, []);
-
-  return { result, connected };
+  return { result };
 }
