@@ -64,7 +64,7 @@ export function useNewtonStatus({ available, polling, currentValues }: UseNewton
       eventSourceRef.current = es;
     }
 
-    // Flush PID data every 5 seconds using ref (no dependency on currentValues)
+    // Send PID snapshot every 1 second (Newton needs 32+ data points to start analyzing)
     if (!flushIntervalRef.current) {
       flushIntervalRef.current = setInterval(() => {
         const vals = currentValuesRef.current;
@@ -80,7 +80,7 @@ export function useNewtonStatus({ available, polling, currentValues }: UseNewton
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ timestamp: Date.now(), values }),
         }).catch(() => {});
-      }, 5000);
+      }, 1000);
     }
 
     return () => {

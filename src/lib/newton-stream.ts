@@ -7,7 +7,7 @@ const API_KEY = () => process.env.ATAI_API_KEY ?? '';
 const API_BASE = () => process.env.ATAI_API_ENDPOINT ?? 'https://api.u1.archetypeai.app/v0.5';
 const MACHINE_STATE_LENS = 'lns-1d519091822706e2-bc108andqxf8b4os';
 const QUERY_INTERVAL_MS = 15000;
-const MIN_DATA_POINTS = 32;
+const MIN_DATA_POINTS = 20;
 const MAX_BUFFER_SIZE = 300;
 const WINDOW_SIZE = 16;
 const STEP_SIZE = 8;
