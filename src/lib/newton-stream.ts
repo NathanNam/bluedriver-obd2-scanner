@@ -239,25 +239,28 @@ class NewtonStreamManager {
               const response = event.event_data.response;
 
               if (Array.isArray(response) && response.length >= 2) {
-                const label = response[0] as string;
-                const scores = response[1] as Record<string, number>;
+                const rawLabel = response[0] as string;
+                const rawScores = response[1] as Record<string, number>;
+                console.log(`[Newton] Window ${windowCount}: label="${rawLabel}" scores=${JSON.stringify(rawScores)}`);
 
-                // Normalize scores: values could be 0-1 or 0-100
+                // Normalize scores to percentages
                 const normalizedScores: Record<string, number> = {};
-                let maxScore = 0;
-                let maxLabel = label;
+                const maxRawValue = Math.max(...Object.values(rawScores));
+                const isAlreadyPercent = maxRawValue > 1;
 
-                for (const [k, v] of Object.entries(scores)) {
-                  // If any value > 1, assume all are already percentages
-                  const isPercentage = Object.values(scores).some((s) => s > 1);
-                  const pct = isPercentage ? Math.round(v) : Math.round(v * 100);
+                let maxPct = 0;
+                let maxLabel = rawLabel;
+
+                for (const [k, v] of Object.entries(rawScores)) {
+                  const pct = isAlreadyPercent ? Math.round(v) : Math.round(v * 100);
                   normalizedScores[k] = pct;
-                  if (pct > maxScore) { maxScore = pct; maxLabel = k; }
+                  if (pct > maxPct) { maxPct = pct; maxLabel = k; }
                 }
 
+                // Use the label with the highest score
                 lastResult = {
                   label: maxLabel,
-                  confidence: maxScore,
+                  confidence: maxPct,
                   scores: normalizedScores,
                   windows: windowCount,
                   timestamp: Date.now(),

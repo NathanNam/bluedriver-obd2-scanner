@@ -103,6 +103,7 @@ export interface PIDDefinition {
   pid: string;
   name: string;
   shortName: string;
+  description: string;
   unit: string;
   min: number;
   max: number;

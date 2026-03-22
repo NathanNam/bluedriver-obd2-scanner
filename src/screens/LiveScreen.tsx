@@ -127,6 +127,11 @@ export function LiveScreen() {
           </div>
         </div>
 
+        {/* Description */}
+        <div style={{ fontSize: 11, color: theme.textTertiary, marginBottom: 4, lineHeight: '15px' }}>
+          {def.description}
+        </div>
+
         {/* SVG chart */}
         <svg viewBox={`0 0 ${CHART_VW} ${CHART_H}`} style={{ width: '100%', height: CHART_H }} preserveAspectRatio="none">
           {/* Caution/critical threshold lines */}
