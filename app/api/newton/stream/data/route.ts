@@ -10,5 +10,5 @@ export async function POST(req: NextRequest) {
   }
 
   newtonStreamManager.addData({ timestamp, values });
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, buffered: newtonStreamManager.bufferSize });
 }

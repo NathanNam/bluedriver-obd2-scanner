@@ -48,6 +48,7 @@ class NewtonStreamManager {
 
   get isRunning() { return this._isRunning; }
   get latestResult() { return this._latestResult; }
+  get bufferSize() { return this.dataBuffer.length; }
 
   addListener(fn: ResultListener) {
     this.listeners.push(fn);
@@ -406,5 +407,6 @@ function generateAttentionCSV(): string {
   return rows.join('\n');
 }
 
-// Singleton
-export const newtonStreamManager = new NewtonStreamManager();
+// Singleton — use globalThis to survive Next.js hot reloads in dev
+const globalForNewton = globalThis as unknown as { newtonStreamManager?: NewtonStreamManager };
+export const newtonStreamManager = globalForNewton.newtonStreamManager ?? (globalForNewton.newtonStreamManager = new NewtonStreamManager());
