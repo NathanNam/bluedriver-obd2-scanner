@@ -39,24 +39,64 @@ export function NewtonChat({ available, loading, messages, askNewton, hasData }:
     askNewton(q, chartImage);
   };
 
-  // Simple markdown: **bold**, numbered lists, bullet lists
+  // Markdown renderer: headings, bold, italic, inline code, lists
   const renderMarkdown = (text: string) => {
     return text.split('\n').map((line, i) => {
-      let processed = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-      const isNumbered = /^\d+\.\s/.test(line);
-      const isBullet = /^[-*]\s/.test(line);
+      // Apply inline formatting
+      let processed = line
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/`(.*?)`/g, '<code style="background:#E5E5EA;padding:1px 4px;border-radius:3px;font-size:12px">$1</code>');
 
-      if (isNumbered || isBullet) {
-        processed = processed.replace(/^(\d+\.\s|[-*]\s)/, '');
+      // Headings
+      const h3Match = line.match(/^###\s+(.*)/);
+      if (h3Match) {
+        const content = h3Match[1].replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        return <div key={i} style={{ fontSize: 14, fontWeight: 700, marginTop: 12, marginBottom: 4 }} dangerouslySetInnerHTML={{ __html: content }} />;
+      }
+      const h2Match = line.match(/^##\s+(.*)/);
+      if (h2Match) {
+        const content = h2Match[1].replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        return <div key={i} style={{ fontSize: 15, fontWeight: 700, marginTop: 14, marginBottom: 4 }} dangerouslySetInnerHTML={{ __html: content }} />;
+      }
+      const h1Match = line.match(/^#\s+(.*)/);
+      if (h1Match) {
+        const content = h1Match[1].replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        return <div key={i} style={{ fontSize: 17, fontWeight: 700, marginTop: 16, marginBottom: 6 }} dangerouslySetInnerHTML={{ __html: content }} />;
+      }
+
+      // Numbered lists
+      const numMatch = line.match(/^(\d+)\.\s+(.*)/);
+      if (numMatch) {
+        const content = numMatch[2]
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\*(.*?)\*/g, '<em>$1</em>');
         return (
-          <div key={i} style={{ paddingLeft: 16, position: 'relative', marginBottom: 4 }}>
-            <span style={{ position: 'absolute', left: 0 }}>{isNumbered ? line.match(/^\d+/)?.[0] + '.' : '\u2022'}</span>
-            <span dangerouslySetInnerHTML={{ __html: processed }} />
+          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6, paddingLeft: 4 }}>
+            <span style={{ color: '#8E8E93', fontWeight: 600, flexShrink: 0 }}>{numMatch[1]}.</span>
+            <span dangerouslySetInnerHTML={{ __html: content }} />
           </div>
         );
       }
 
+      // Bullet lists
+      const bulletMatch = line.match(/^[-*•]\s+(.*)/);
+      if (bulletMatch) {
+        const content = bulletMatch[1]
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\*(.*?)\*/g, '<em>$1</em>');
+        return (
+          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 4, paddingLeft: 4 }}>
+            <span style={{ color: '#8E8E93', flexShrink: 0 }}>{'\u2022'}</span>
+            <span dangerouslySetInnerHTML={{ __html: content }} />
+          </div>
+        );
+      }
+
+      // Empty line
       if (!line.trim()) return <div key={i} style={{ height: 8 }} />;
+
+      // Regular paragraph
       return <div key={i} style={{ marginBottom: 4 }} dangerouslySetInnerHTML={{ __html: processed }} />;
     });
   };

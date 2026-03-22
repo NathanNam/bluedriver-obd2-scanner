@@ -94,6 +94,7 @@ export function LiveScreen() {
     return (
       <div
         key={def.pid}
+        id={`chart-${def.pid}`}
         style={{
           backgroundColor: theme.surface,
           border: `1px solid ${isAlert ? theme.critical : theme.border}`,
