@@ -18,6 +18,8 @@ export function NewtonIndicator({ healthResult, newtonResult, newtonConnected, n
   const healthNormal = healthResult?.label === 'normal';
   const newtonAge = newtonResult ? Math.round((Date.now() - newtonResult.timestamp) / 1000) : 0;
   const newtonStale = newtonAge > 60;
+  const newtonConfident = newtonResult && newtonResult.confidence >= 60;
+  const newtonIsNormal = newtonResult?.label === 'normal';
 
   return (
     <div style={{ display: 'flex', gap: 8 }}>
@@ -44,12 +46,10 @@ export function NewtonIndicator({ healthResult, newtonResult, newtonConnected, n
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '5px 10px', borderRadius: 8,
-            backgroundColor: !newtonResult ? theme.surfaceSecondary
-              : newtonStale ? theme.surfaceSecondary
-                : newtonResult.label === 'normal' ? theme.success + '15' : theme.warning + '15',
-            border: `1px solid ${!newtonResult ? theme.border
-              : newtonStale ? theme.border
-                : newtonResult.label === 'normal' ? theme.success + '30' : theme.warning + '30'}`,
+            backgroundColor: !newtonResult || newtonStale || !newtonConfident ? theme.surfaceSecondary
+              : newtonIsNormal ? theme.success + '15' : theme.warning + '15',
+            border: `1px solid ${!newtonResult || newtonStale || !newtonConfident ? theme.border
+              : newtonIsNormal ? theme.success + '30' : theme.warning + '30'}`,
           }}
           title={newtonResult
             ? `Newton: ${newtonResult.label} (${newtonResult.confidence}%) — ${newtonResult.windows} windows — ${newtonAge}s ago`
@@ -57,19 +57,20 @@ export function NewtonIndicator({ healthResult, newtonResult, newtonConnected, n
         >
           <div style={{
             width: 6, height: 6, borderRadius: 3,
-            backgroundColor: !newtonResult || newtonStale ? theme.textTertiary
-              : newtonResult.label === 'normal' ? theme.success : theme.warning,
+            backgroundColor: !newtonResult || newtonStale || !newtonConfident ? theme.textTertiary
+              : newtonIsNormal ? theme.success : theme.warning,
           }} />
           <div style={{ lineHeight: '12px' }}>
             <div style={{ fontSize: 9, fontWeight: 600, color: theme.textSecondary }}>Newton</div>
             <div style={{
               fontSize: 10, fontWeight: 600,
-              color: !newtonResult || newtonStale ? theme.textTertiary
-                : newtonResult.label === 'normal' ? theme.success : theme.warning,
+              color: !newtonResult || newtonStale || !newtonConfident ? theme.textTertiary
+                : newtonIsNormal ? theme.success : theme.warning,
             }}>
               {!newtonResult ? 'Analyzing...'
-                : newtonStale ? `${newtonResult.label} (stale)`
-                  : `${newtonResult.label === 'normal' ? 'Normal' : 'Attention'} ${newtonResult.confidence}%`}
+                : newtonStale ? 'Stale'
+                  : !newtonConfident ? 'Learning...'
+                    : newtonIsNormal ? 'Normal' : 'Attention'}
             </div>
           </div>
         </div>
