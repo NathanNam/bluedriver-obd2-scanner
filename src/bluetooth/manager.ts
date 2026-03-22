@@ -12,6 +12,18 @@ const COMMAND_TIMEOUT_MS = 5000;
 const BUS_BUSY_RETRY_DELAY_MS = 200;
 const BUS_BUSY_MAX_RETRIES = 3;
 
+// Common BLE service UUIDs for ELM327/OBD2 adapters
+const OBD_SERVICE_UUIDS = [
+  '0000fff0-0000-1000-8000-00805f9b34fb', // Most common ELM327 BLE
+  '0000ffe0-0000-1000-8000-00805f9b34fb', // Alternate common
+  '0000ffe5-0000-1000-8000-00805f9b34fb', // Some Veepeak/Vgate
+  'e7810a71-73ae-499d-8c15-faa9aef0c3f2', // Nordic UART variant
+  'ef680100-9b35-4933-9b10-52ffa9740042', // BlueDriver
+  '169b52a0-b7fd-40da-998c-dd9238327e55', // BlueDriver proprietary
+  '331a36f5-2459-45ea-9d95-6142f0c4b307', // BlueDriver proprietary
+  '0000180a-0000-1000-8000-00805f9b34fb', // Device Information
+];
+
 type StateListener = (state: ConnectionState) => void;
 type DeviceListener = (device: DiscoveredDevice) => void;
 type ErrorListener = (error: string) => void;
@@ -125,7 +137,6 @@ class BluetoothManager {
       return;
     }
 
-    // Web Bluetooth — browser shows its own device picker
     if (!WEB_BLUETOOTH_AVAILABLE) {
       this.emitError('Web Bluetooth is not available in this browser. Use Chrome or Edge.');
       this.setState('ERROR');
@@ -133,24 +144,10 @@ class BluetoothManager {
     }
 
     try {
-      // Use acceptAllDevices so we don't need to know the exact service UUID upfront.
-      // optionalServices lists common OBD2/ELM327 UUIDs so we can access them after pairing.
       const device = await navigator.bluetooth.requestDevice({
         acceptAllDevices: true,
-        optionalServices: [
-          // BlueDriver Pro proprietary services
-          '169b52a0-b7fd-40da-998c-dd9238327e55',
-          '331a36f5-2459-45ea-9d95-6142f0c4b307',
-          // Standard + common ELM327/OBD2 services
-          '0000180a-0000-1000-8000-00805f9b34fb',
-          '0000fff0-0000-1000-8000-00805f9b34fb',
-          '0000ffe0-0000-1000-8000-00805f9b34fb',
-          '0000ffe5-0000-1000-8000-00805f9b34fb',
-          'ef680100-9b35-4933-9b10-52ffa9740042',
-          'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
-        ],
+        optionalServices: OBD_SERVICE_UUIDS,
       });
-      // Store device for reuse in connect()
       this.btDevice = device;
       this.deviceListeners.forEach((fn) => fn({
         id: device.id,
@@ -159,7 +156,7 @@ class BluetoothManager {
       }));
     } catch (err: any) {
       if (err.name === 'NotFoundError') {
-        this.setState('IDLE'); // User cancelled picker
+        this.setState('IDLE');
       } else {
         this.emitError(`Scan failed: ${err.message}`);
         this.setState('ERROR');
@@ -185,7 +182,6 @@ class BluetoothManager {
       return true;
     }
 
-    // Real Web Bluetooth connect — reuse device from startScan()
     try {
       const device = this.btDevice;
       if (!device) {
@@ -207,111 +203,50 @@ class BluetoothManager {
       this.gattServer = server;
       this._connectedDeviceName = device.name ?? 'OBD2 Device';
 
-      // Find service and characteristics
+      // Discover services and find TX/RX characteristics
       const resolved = await this.resolveWebCharacteristics(server);
       if (!resolved) {
-        this.emitError('Could not find OBD2 service on device');
+        this.emitError('Could not find OBD2 service on device. Check console for details.');
         this.setState('ERROR');
         return false;
       }
 
-      // Subscribe to ALL notifiable characteristics across all services
-      const allWritableChars: BluetoothRemoteGATTCharacteristic[] = [];
-      const allServices = await server.getPrimaryServices();
-      for (const svc of allServices) {
-        try {
-          const chars = await svc.getCharacteristics();
-          for (const char of chars) {
-            if ((char as any).properties.write || (char as any).properties.writeWithoutResponse) {
-              allWritableChars.push(char);
-            }
-            if ((char as any).properties.notify || (char as any).properties.indicate) {
-              try {
-                await char.startNotifications();
-                console.log(`[BLE] Subscribed to notifications on: ${char.uuid} (service: ${svc.uuid})`);
-                char.addEventListener('characteristicvaluechanged', (event: any) => {
-                  const value = event.target.value as DataView;
-                  const bytes = new Uint8Array(value.buffer);
-                  const decoded = new TextDecoder().decode(value);
-                  const hexBytes = Array.from(bytes)
-                    .map((b: number) => b.toString(16).padStart(2, '0'))
-                    .join(' ');
-                  console.log(`[BLE] RX on ${char.uuid}: hex=[${hexBytes}] ascii="${decoded}" len=${bytes.length}`);
+      // Subscribe to RX notifications
+      await this.rxChar!.startNotifications();
+      this.rxChar!.addEventListener('characteristicvaluechanged', (event: any) => {
+        const value = event.target.value as DataView;
+        const decoded = new TextDecoder().decode(value);
+        this.responseBuffer += decoded;
 
-                  // Feed into response buffer
-                  this.responseBuffer += decoded;
-                  if (this.responseBuffer.includes('>')) {
-                    const response = this.responseBuffer.replace(/>/g, '').trim();
-                    console.log(`[BLE] Complete response: "${response}"`);
-                    this.responseBuffer = '';
-                    if (this.responseTimeout) { clearTimeout(this.responseTimeout); this.responseTimeout = null; }
-                    if (this.responseResolve) { const r = this.responseResolve; this.responseResolve = null; r(response); }
-                  }
-                });
-              } catch (e: any) {
-                console.warn(`[BLE] Failed to subscribe to ${char.uuid}: ${e.message}`);
-              }
-            }
-          }
-        } catch { /* skip */ }
-      }
-
-      // Step 1: Passive listen — wait 5 seconds after connect to see if
-      // the adapter sends any unsolicited data (banner, prompt, etc.)
-      console.log('[BLE] Waiting 5 seconds for unsolicited data...');
-      await this.delay(5000);
-      if (this.responseBuffer.length > 0) {
-        console.log(`[BLE] Unsolicited data received: "${this.responseBuffer}"`);
-        this.responseBuffer = '';
-      } else {
-        console.log('[BLE] No unsolicited data received.');
-      }
-
-      // Step 2: Send a bare \r to see if we get a prompt
-      console.log('[BLE] Sending bare \\r to probe for prompt...');
-      for (const txChar of allWritableChars) {
-        try {
-          const crData = new TextEncoder().encode('\r');
-          const writeOp = (txChar as any).properties.writeWithoutResponse
-            ? txChar.writeValueWithoutResponse(crData)
-            : txChar.writeValueWithResponse(crData);
-          await writeOp;
-          console.log(`[BLE] Bare \\r sent on ${txChar.uuid} — waiting 3s for response...`);
-          await this.delay(3000);
-          if (this.responseBuffer.length > 0) {
-            console.log(`[BLE] Got response on ${txChar.uuid}: "${this.responseBuffer}"`);
-            // This is the right TX characteristic!
-            this.txChar = txChar;
-            this.responseBuffer = '';
-            break;
-          } else {
-            console.log(`[BLE] No response from ${txChar.uuid}`);
-          }
-        } catch (e: any) {
-          console.log(`[BLE] Write to ${txChar.uuid} failed: ${e.message}`);
+        if (this.responseBuffer.includes('>')) {
+          const response = this.responseBuffer.replace(/>/g, '').trim();
+          this.responseBuffer = '';
+          if (this.responseTimeout) { clearTimeout(this.responseTimeout); this.responseTimeout = null; }
+          if (this.responseResolve) { const r = this.responseResolve; this.responseResolve = null; r(response); }
         }
-      }
+      });
 
-      // Step 3: Send ATZ with longer timeout after delay
-      console.log('[BLE] Sending ATZ (with 2s post-delay)...');
-      await this.delay(1000);
+      // ELM327 initialization
+      await this.delay(500); // Let adapter settle after GATT connect
+
       const atzResp = await this.sendCommand('ATZ', 10000);
-      console.log(`[BLE] ATZ response: "${atzResp}"`);
-      await this.delay(2000); // ATZ causes adapter reset, give it time
+      if (!atzResp) {
+        // ATZ may not produce a clean response on some adapters — continue
+        console.warn('[BLE] No response to ATZ, continuing init...');
+      }
+      await this.delay(1000); // ATZ resets the adapter, give it time
 
-      // Step 4: Continue init
       for (const cmd of ['ATE0', 'ATL0', 'ATH0', 'ATSP0']) {
-        console.log(`[BLE] Sending: ${cmd}`);
-        const resp = await this.sendCommand(cmd, 8000);
-        console.log(`[BLE] Response to ${cmd}: "${resp}"`);
-        await this.delay(300);
+        await this.sendCommand(cmd, 5000);
+        await this.delay(200);
       }
 
-      console.log('[BLE] Sending: 0100');
+      // Verify ECU communication
       const pidCheck = await this.sendCommand('0100', 10000);
-      console.log(`[BLE] Response to 0100: "${pidCheck}"`);
       if (!pidCheck.includes('41 00') && !pidCheck.includes('4100')) {
-        this.emitError('ECU not responding — check console for debug details');
+        // If 0100 fails, the adapter is connected but the car may not be responding.
+        // This can happen if ignition is off.
+        this.emitError('Adapter connected but ECU not responding. Is the ignition ON?');
         this.setState('ERROR');
         return false;
       }
@@ -326,65 +261,48 @@ class BluetoothManager {
   }
 
   private async resolveWebCharacteristics(server: BluetoothRemoteGATTServer): Promise<boolean> {
-    // Try BlueDriver proprietary UUIDs first, then common OBD2 UUIDs
-    const knownUUIDs = [
-      '169b52a0-b7fd-40da-998c-dd9238327e55',
-      '331a36f5-2459-45ea-9d95-6142f0c4b307',
-      '0000fff0-0000-1000-8000-00805f9b34fb',
-      '0000ffe0-0000-1000-8000-00805f9b34fb',
-      '0000ffe5-0000-1000-8000-00805f9b34fb',
-      'ef680100-9b35-4933-9b10-52ffa9740042',
-      'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
-    ];
-
-    for (const uuid of knownUUIDs) {
+    // Try known OBD2 service UUIDs
+    for (const uuid of OBD_SERVICE_UUIDS) {
       try {
         const service = await server.getPrimaryService(uuid);
         const chars = await service.getCharacteristics();
-        console.log(`[BLE] Service ${uuid}: ${chars.length} characteristics`);
-        chars.forEach((c: any) => {
-          console.log(`  [BLE] Char ${c.uuid} — write:${c.properties.write} writeNoResp:${c.properties.writeWithoutResponse} notify:${c.properties.notify} indicate:${c.properties.indicate}`);
-        });
+
         const writable = chars.filter((c: any) => c.properties.write || c.properties.writeWithoutResponse);
         const notifiable = chars.filter((c: any) => c.properties.notify || c.properties.indicate);
 
         if (writable.length > 0 && notifiable.length > 0) {
-          // Prefer distinct TX/RX characteristics if available
-          const rxOnly = notifiable.find((c: any) => !c.properties.write && !c.properties.writeWithoutResponse);
+          // Prefer distinct TX-only and RX-only characteristics
           const txOnly = writable.find((c: any) => !c.properties.notify && !c.properties.indicate);
+          const rxOnly = notifiable.find((c: any) => !c.properties.write && !c.properties.writeWithoutResponse);
 
           this.txChar = txOnly ?? writable[0];
           this.rxChar = rxOnly ?? notifiable.find((c: any) => c.uuid !== this.txChar!.uuid) ?? notifiable[0];
 
-          console.log(`[BLE] Using TX: ${this.txChar.uuid}, RX: ${this.rxChar.uuid}`);
+          console.log(`[BLE] Service: ${uuid}`);
+          console.log(`[BLE] TX: ${this.txChar.uuid}, RX: ${this.rxChar.uuid}`);
           return true;
         }
       } catch { /* service not found, try next */ }
     }
 
-    // Fallback: enumerate all services and find any writable + notifiable pair
+    // Fallback: enumerate all services
     try {
       const services = await server.getPrimaryServices();
-      console.log(`[BLE] Found ${services.length} services total`);
       for (const service of services) {
-        console.log(`[BLE] Service: ${service.uuid}`);
         try {
           const chars = await service.getCharacteristics();
-          chars.forEach((c: any) => {
-            console.log(`  [BLE] Char ${c.uuid} — write:${c.properties.write} writeNoResp:${c.properties.writeWithoutResponse} notify:${c.properties.notify} indicate:${c.properties.indicate}`);
-          });
           const tx = chars.find((c: any) => c.properties.write || c.properties.writeWithoutResponse);
           const rx = chars.find((c: any) => c.properties.notify || c.properties.indicate);
           if (tx && rx) {
             this.txChar = tx;
             this.rxChar = rx;
-            console.log(`[BLE] Fallback — Using TX: ${tx.uuid}, RX: ${rx.uuid} from service ${service.uuid}`);
+            console.log(`[BLE] Fallback service: ${service.uuid}, TX: ${tx.uuid}, RX: ${rx.uuid}`);
             return true;
           }
-        } catch { /* can't read chars for this service */ }
+        } catch { /* skip */ }
       }
     } catch (err: any) {
-      console.warn(`[BLE] getPrimaryServices() failed: ${err.message}`);
+      console.warn(`[BLE] Service discovery failed: ${err.message}`);
     }
 
     return false;
@@ -423,20 +341,14 @@ class BluetoothManager {
         resolve('');
       }, timeout);
 
-      const cmdStr = terminateCommand(command);
-      const data = new TextEncoder().encode(cmdStr);
-      console.log(`[BLE] TX write: "${command}" (${data.length} bytes)`);
+      const data = new TextEncoder().encode(terminateCommand(command));
 
-      // Try writeValueWithoutResponse first (many BLE OBD adapters require this),
-      // fall back to writeValue (write-with-response)
       const writeOp = this.txChar!.properties.writeWithoutResponse
         ? this.txChar!.writeValueWithoutResponse(data)
         : this.txChar!.writeValueWithResponse(data);
 
-      writeOp.then(() => {
-        console.log(`[BLE] TX write success`);
-      }).catch((err: any) => {
-        console.error(`[BLE] TX write failed: ${err.message}`);
+      writeOp.catch((err: any) => {
+        console.error(`[BLE] Write failed: ${err.message}`);
         if (this.responseTimeout) { clearTimeout(this.responseTimeout); this.responseTimeout = null; }
         this.responseResolve = null;
         resolve('');
