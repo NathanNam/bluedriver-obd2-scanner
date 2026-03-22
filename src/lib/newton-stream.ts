@@ -1,14 +1,17 @@
 // ============================================================
-// Newton Stream Manager — server-side Machine State Lens
-// Buffers OBD2 PID data, periodically queries Archetype AI
+// Newton Stream Manager — Machine State Lens for OBD2
+// Adapted from corsense-hrv reference implementation
 // ============================================================
 
 const API_KEY = () => process.env.ATAI_API_KEY ?? '';
 const API_BASE = () => process.env.ATAI_API_ENDPOINT ?? 'https://api.u1.archetypeai.app/v0.5';
 const MACHINE_STATE_LENS = 'lns-1d519091822706e2-bc108andqxf8b4os';
 const QUERY_INTERVAL_MS = 15000;
-const MIN_DATA_POINTS = 10;
-const MAX_BUFFER_SIZE = 200;
+const MIN_DATA_POINTS = 32;
+const MAX_BUFFER_SIZE = 300;
+const WINDOW_SIZE = 16;
+const STEP_SIZE = 8;
+const SSE_TIMEOUT_MS = 120000;
 
 interface PIDSnapshot {
   timestamp: number;
@@ -25,11 +28,19 @@ interface StreamResult {
 
 type ResultListener = (result: StreamResult) => void;
 
+const DATA_COLUMNS = ['rpm', 'speed', 'coolant_temp', 'iat', 'engine_load', 'throttle', 'map', 'fuel_level', 'stft_b1', 'ltft_b1', 'maf'];
+const PID_TO_COL: Record<string, string> = {
+  '0C': 'rpm', '0D': 'speed', '05': 'coolant_temp', '0F': 'iat',
+  '04': 'engine_load', '11': 'throttle', '0B': 'map', '2F': 'fuel_level',
+  '06': 'stft_b1', '07': 'ltft_b1', '10': 'maf',
+};
+
 class NewtonStreamManager {
   private dataBuffer: PIDSnapshot[] = [];
   private sessionId: string | null = null;
   private normalFileId: string | null = null;
   private attentionFileId: string | null = null;
+  private lastCsvFileId: string | null = null;
   private queryInterval: ReturnType<typeof setInterval> | null = null;
   private listeners: ResultListener[] = [];
   private _latestResult: StreamResult | null = null;
@@ -61,13 +72,17 @@ class NewtonStreamManager {
     this.dataBuffer = [];
     this._latestResult = null;
 
-    // Upload n-shot examples on first start
+    // Upload n-shot focus CSVs (cached across restarts)
     if (!this.normalFileId || !this.attentionFileId) {
       await this.uploadExamples();
     }
 
-    // Periodic query
-    this.queryInterval = setInterval(() => this.query(), QUERY_INTERVAL_MS);
+    // Start periodic queries after a short delay
+    setTimeout(() => {
+      if (this._isRunning) {
+        this.queryInterval = setInterval(() => this.runQuery(), QUERY_INTERVAL_MS);
+      }
+    }, 3000);
   }
 
   stop() {
@@ -76,66 +91,89 @@ class NewtonStreamManager {
       clearInterval(this.queryInterval);
       this.queryInterval = null;
     }
-    // Clean up session
     if (this.sessionId) {
       this.deleteSession(this.sessionId).catch(() => {});
       this.sessionId = null;
     }
+    if (this.lastCsvFileId) {
+      this.deleteFile(this.lastCsvFileId).catch(() => {});
+      this.lastCsvFileId = null;
+    }
+    this.dataBuffer = [];
   }
 
-  private async query() {
-    if (this.dataBuffer.length < MIN_DATA_POINTS) return;
+  private async runQuery() {
+    if (this.dataBuffer.length < MIN_DATA_POINTS) {
+      console.log(`[Newton] Waiting for data... (${this.dataBuffer.length}/${MIN_DATA_POINTS})`);
+      return;
+    }
 
     try {
+      // Build and upload CSV
       const csv = this.buildCSV();
       const fileId = await this.uploadFile('obd2-live.csv', csv, 'text/csv');
-      if (!fileId) return;
-
-      // Create session if needed
-      if (!this.sessionId) {
-        await this.createSession();
+      if (!fileId) {
+        console.error('[Newton] Failed to upload CSV');
+        return;
       }
-      if (!this.sessionId) return;
 
-      // Set input stream
-      await this.apiCall(`/lens/sessions/events/process`, {
+      // Clean up previous CSV
+      if (this.lastCsvFileId) {
+        this.deleteFile(this.lastCsvFileId).catch(() => {});
+      }
+      this.lastCsvFileId = fileId;
+
+      // Create session on first query
+      if (!this.sessionId) {
+        const created = await this.createSession();
+        if (!created) return;
+      }
+
+      // Set input stream to new CSV
+      await this.apiCall('/lens/sessions/events/process', {
         session_id: this.sessionId,
         event: {
           type: 'input_stream.set',
           event_data: {
             stream_type: 'csv_file_reader',
-            stream_config: { file_id: fileId },
+            stream_config: {
+              file_id: fileId,
+              window_size: WINDOW_SIZE,
+              step_size: STEP_SIZE,
+              loop_recording: false,
+              output_format: '',
+            },
           },
         },
       });
 
-      // Read results via SSE
-      const results = await this.readSSEResults(this.sessionId);
-      if (results) {
-        this.emit(results);
-      }
+      // Calculate expected windows for early termination
+      const dataPoints = this.dataBuffer.length;
+      const expectedWindows = Math.max(1, Math.floor((dataPoints - WINDOW_SIZE) / STEP_SIZE) + 1);
 
-      // Clean up data file
-      this.deleteFile(fileId).catch(() => {});
+      // Read SSE results
+      const result = await this.readSSEResults(this.sessionId!, expectedWindows);
+      if (result) {
+        this.emit(result);
+        console.log(`[Newton] Classification: ${result.label} (${result.confidence}%) — ${result.windows} windows`);
+      }
     } catch (err) {
-      console.error('[Newton Stream] Query failed:', err);
+      console.error('[Newton] Query failed:', err);
+      // Invalidate session on failure — will be recreated next query
+      this.sessionId = null;
     }
   }
 
   private buildCSV(): string {
-    const columns = ['timestamp', 'rpm', 'speed', 'coolant_temp', 'iat', 'engine_load', 'throttle', 'map', 'fuel_level', 'stft_b1', 'ltft_b1', 'maf'];
-    const pidMap: Record<string, string> = {
-      '0C': 'rpm', '0D': 'speed', '05': 'coolant_temp', '0F': 'iat',
-      '04': 'engine_load', '11': 'throttle', '0B': 'map', '2F': 'fuel_level',
-      '06': 'stft_b1', '07': 'ltft_b1', '10': 'maf',
-    };
-
+    const columns = ['timestamp', ...DATA_COLUMNS];
     const rows = [columns.join(',')];
     const baseTime = this.dataBuffer[0]?.timestamp ?? 0;
 
     for (const snapshot of this.dataBuffer) {
-      const row: Record<string, string> = { timestamp: ((snapshot.timestamp - baseTime) / 1000).toFixed(3) };
-      for (const [pid, col] of Object.entries(pidMap)) {
+      const row: Record<string, string> = {
+        timestamp: ((snapshot.timestamp - baseTime) / 1000).toFixed(3),
+      };
+      for (const [pid, col] of Object.entries(PID_TO_COL)) {
         row[col] = snapshot.values[pid]?.toFixed(1) ?? '0';
       }
       rows.push(columns.map((c) => row[c] ?? '0').join(','));
@@ -144,84 +182,121 @@ class NewtonStreamManager {
     return rows.join('\n');
   }
 
-  private async createSession() {
+  private async createSession(): Promise<boolean> {
     try {
+      console.log('[Newton] Creating Machine State Lens session...');
+
       const res = await this.apiCall('/lens/sessions/create', {
         lens_id: MACHINE_STATE_LENS,
       });
       this.sessionId = res.session_id;
+      if (!this.sessionId) throw new Error('No session_id returned');
 
-      // Configure n-shot classification
+      // Configure n-shot classification with focus CSVs
       await this.apiCall('/lens/sessions/events/process', {
         session_id: this.sessionId,
         event: {
           type: 'session.modify',
           event_data: {
-            focus: 'Classify vehicle health from OBD2 sensor data. Normal means all readings within expected ranges. Attention means one or more sensors show concerning values (high coolant temp, erratic RPM, extreme fuel trims, overheating).',
+            focus: 'Classify vehicle health from OBD2 sensor data. "normal" means all readings within expected ranges for a running vehicle. "attention" means one or more sensors show concerning values such as high coolant temperature, erratic RPM, extreme fuel trims, overheating oil, or unusual engine load patterns.',
             input_n_shot: {
               normal: this.normalFileId,
               attention: this.attentionFileId,
             },
             csv_configs: {
-              header_row: 0,
               timestamp_column: 'timestamp',
-              window_size: 10,
-              step_size: 5,
+              data_columns: DATA_COLUMNS,
+              window_size: WINDOW_SIZE,
+              step_size: STEP_SIZE,
             },
           },
         },
       });
 
-      // Enable SSE output
+      // Set output stream to SSE
       await this.apiCall('/lens/sessions/events/process', {
         session_id: this.sessionId,
         event: {
           type: 'output_stream.set',
-          event_data: { stream_type: 'sse' },
+          event_data: {
+            stream_type: 'server_side_events_writer',
+            stream_config: {},
+          },
         },
       });
+
+      console.log(`[Newton] Session created: ${this.sessionId}`);
+      return true;
     } catch (err) {
-      console.error('[Newton Stream] Session creation failed:', err);
+      console.error('[Newton] Session creation failed:', err);
       this.sessionId = null;
+      return false;
     }
   }
 
-  private async readSSEResults(sessionId: string): Promise<StreamResult | null> {
+  private async readSSEResults(sessionId: string, expectedWindows: number): Promise<StreamResult | null> {
     const url = `${API_BASE()}/lens/sessions/consumer/${sessionId}`;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    const timeout = setTimeout(() => controller.abort(), SSE_TIMEOUT_MS);
 
     try {
       const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${API_KEY()}` },
+        headers: {
+          Authorization: `Bearer ${API_KEY()}`,
+          Accept: 'text/event-stream',
+        },
         signal: controller.signal,
       });
 
       const text = await res.text();
       clearTimeout(timeout);
 
-      // Parse SSE events
+      // Parse SSE events — response format: [label, {label1: score1, label2: score2}]
       let lastResult: StreamResult | null = null;
-      for (const line of text.split('\n')) {
-        if (line.startsWith('data:')) {
+      let windowCount = 0;
+
+      for (const block of text.split('\n\n')) {
+        for (const line of block.split('\n')) {
+          if (!line.startsWith('data:')) continue;
           try {
-            const data = JSON.parse(line.substring(5).trim());
-            if (data.type === 'inference.result' && data.data) {
-              const d = data.data;
-              lastResult = {
-                label: d.label ?? 'unknown',
-                confidence: Math.round((d.confidence ?? 0) * 100),
-                scores: {
-                  normal: Math.round((d.scores?.normal ?? 0) * 100),
-                  attention: Math.round((d.scores?.attention ?? 0) * 100),
-                },
-                windows: d.windows ?? 0,
-                timestamp: Date.now(),
-              };
+            const event = JSON.parse(line.substring(5).trim());
+
+            if (event.type === 'inference.result' && event.event_data?.response) {
+              windowCount++;
+              const response = event.event_data.response;
+
+              // Response format: [label, {scores}]
+              if (Array.isArray(response) && response.length >= 2) {
+                const label = response[0] as string;
+                const scores = response[1] as Record<string, number>;
+
+                const normalizedScores: Record<string, number> = {};
+                let maxScore = 0;
+                let maxLabel = label;
+
+                for (const [k, v] of Object.entries(scores)) {
+                  const pct = Math.round(v * (v > 1 ? 1 : 100));
+                  normalizedScores[k] = pct;
+                  if (pct > maxScore) { maxScore = pct; maxLabel = k; }
+                }
+
+                lastResult = {
+                  label: maxLabel,
+                  confidence: maxScore,
+                  scores: normalizedScores,
+                  windows: windowCount,
+                  timestamp: Date.now(),
+                };
+              }
             }
-          } catch { /* skip malformed events */ }
+
+            // Early exit if we've received all expected windows
+            if (windowCount >= expectedWindows) break;
+          } catch { /* skip malformed */ }
         }
+        if (windowCount >= expectedWindows) break;
       }
+
       return lastResult;
     } catch {
       clearTimeout(timeout);
@@ -229,12 +304,15 @@ class NewtonStreamManager {
     }
   }
 
+  // --- File Management ---
+
   private async uploadExamples() {
+    console.log('[Newton] Uploading n-shot example CSVs...');
     const normalCSV = generateNormalCSV();
     const attentionCSV = generateAttentionCSV();
-
     this.normalFileId = await this.uploadFile('focus-normal.csv', normalCSV, 'text/csv');
     this.attentionFileId = await this.uploadFile('focus-attention.csv', attentionCSV, 'text/csv');
+    console.log(`[Newton] Focus files: normal=${this.normalFileId}, attention=${this.attentionFileId}`);
   }
 
   private async uploadFile(name: string, content: string, contentType: string): Promise<string | null> {
@@ -250,37 +328,36 @@ class NewtonStreamManager {
       });
       const data = await res.json();
       return data.file_id ?? null;
-    } catch {
+    } catch (err) {
+      console.error('[Newton] File upload failed:', err);
       return null;
     }
   }
 
   private async deleteFile(fileId: string) {
-    await fetch(`${API_BASE()}/files/${fileId}`, {
+    fetch(`${API_BASE()}/files/${fileId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${API_KEY()}` },
-    });
+    }).catch(() => {});
   }
 
   private async deleteSession(sessionId: string) {
-    await fetch(`${API_BASE()}/lens/sessions/${sessionId}`, {
+    fetch(`${API_BASE()}/lens/sessions/${sessionId}`, {
       method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${API_KEY()}`,
-        'Content-Type': 'application/json',
-      },
-    });
+      headers: { Authorization: `Bearer ${API_KEY()}`, 'Content-Type': 'application/json' },
+    }).catch(() => {});
   }
 
   private async apiCall(path: string, body: any): Promise<any> {
     const res = await fetch(`${API_BASE()}${path}`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${API_KEY()}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { Authorization: `Bearer ${API_KEY()}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`API ${path} failed (${res.status}): ${text}`);
+    }
     return res.json();
   }
 }
@@ -288,7 +365,7 @@ class NewtonStreamManager {
 // --- N-shot Example CSV Generators ---
 
 function generateNormalCSV(): string {
-  const cols = 'timestamp,rpm,speed,coolant_temp,iat,engine_load,throttle,map,fuel_level,stft_b1,ltft_b1,maf';
+  const cols = ['timestamp', ...DATA_COLUMNS].join(',');
   const rows = [cols];
   for (let i = 0; i < 100; i++) {
     const t = (i * 0.5).toFixed(3);
@@ -309,21 +386,21 @@ function generateNormalCSV(): string {
 }
 
 function generateAttentionCSV(): string {
-  const cols = 'timestamp,rpm,speed,coolant_temp,iat,engine_load,throttle,map,fuel_level,stft_b1,ltft_b1,maf';
+  const cols = ['timestamp', ...DATA_COLUMNS].join(',');
   const rows = [cols];
   for (let i = 0; i < 100; i++) {
     const t = (i * 0.5).toFixed(3);
-    const rpm = (600 + Math.random() * 800 + (Math.random() > 0.8 ? 1500 : 0)).toFixed(1); // erratic
+    const rpm = (600 + Math.random() * 800 + (Math.random() > 0.8 ? 1500 : 0)).toFixed(1);
     const speed = (40 + Math.random() * 30).toFixed(1);
-    const coolant = (105 + i * 0.15 + Math.random() * 3).toFixed(1); // creeping up
-    const iat = (45 + Math.random() * 10).toFixed(1); // warm
-    const load = (50 + Math.random() * 40).toFixed(1); // high/erratic
+    const coolant = (105 + i * 0.15 + Math.random() * 3).toFixed(1);
+    const iat = (45 + Math.random() * 10).toFixed(1);
+    const load = (50 + Math.random() * 40).toFixed(1);
     const throttle = (30 + Math.random() * 30).toFixed(1);
     const map = (80 + Math.random() * 30).toFixed(1);
-    const fuel = (15 - i * 0.1).toFixed(1); // low and dropping
-    const stft = (15 + Math.random() * 10).toFixed(1); // running very lean
-    const ltft = (12 + Math.random() * 8).toFixed(1); // high long-term trim
-    const maf = (3 + Math.random() * 5).toFixed(1); // low airflow
+    const fuel = (15 - i * 0.1).toFixed(1);
+    const stft = (15 + Math.random() * 10).toFixed(1);
+    const ltft = (12 + Math.random() * 8).toFixed(1);
+    const maf = (3 + Math.random() * 5).toFixed(1);
     rows.push(`${t},${rpm},${speed},${coolant},${iat},${load},${throttle},${map},${fuel},${stft},${ltft},${maf}`);
   }
   return rows.join('\n');

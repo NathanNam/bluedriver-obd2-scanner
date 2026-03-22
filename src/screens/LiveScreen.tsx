@@ -219,6 +219,17 @@ export function LiveScreen() {
 
       {/* Scrollable content */}
       <div style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
+        {/* Newton Chat — top of content area */}
+        <div style={{ marginBottom: 16 }}>
+          <NewtonChat
+            available={newton.available}
+            loading={newton.loading}
+            messages={newton.messages}
+            askNewton={newton.askNewton}
+            hasData={activePIDs.length > 0}
+          />
+        </div>
+
         {/* Stacked Time-Series Charts */}
         {activePIDs.length > 0 ? (
           <div id="live-charts" style={{
@@ -282,16 +293,6 @@ export function LiveScreen() {
           </div>
         )}
 
-        {/* Newton Chat */}
-        <div style={{ marginBottom: 16 }}>
-          <NewtonChat
-            available={newton.available}
-            loading={newton.loading}
-            messages={newton.messages}
-            askNewton={newton.askNewton}
-            hasData={activePIDs.length > 0}
-          />
-        </div>
       </div>
 
       {/* Start/Stop Button */}
