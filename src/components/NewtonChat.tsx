@@ -166,10 +166,13 @@ export function NewtonChat({ available, loading, messages, askNewton, hasData }:
             {loading && (
               <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 8 }}>
                 <div style={{
-                  padding: '8px 12px', borderRadius: 12,
+                  padding: '10px 14px', borderRadius: 12,
                   backgroundColor: theme.surfaceSecondary, fontSize: 13, color: theme.textSecondary,
                 }}>
-                  Analyzing your dashboard...
+                  <div>Analyzing your dashboard...</div>
+                  <div style={{ fontSize: 11, color: theme.textTertiary, marginTop: 4 }}>
+                    This typically takes 30-60 seconds. Newton captures your charts, converts them to video, and analyzes them with its vision model.
+                  </div>
                 </div>
               </div>
             )}
