@@ -153,10 +153,13 @@ class NewtonStreamManager {
       const expectedWindows = Math.max(1, Math.floor((dataPoints - WINDOW_SIZE) / STEP_SIZE) + 1);
 
       // Read SSE results
+      console.log(`[Newton] Querying SSE (expecting ${expectedWindows} windows from ${dataPoints} data points)...`);
       const result = await this.readSSEResults(this.sessionId!, expectedWindows);
       if (result) {
         this.emit(result);
         console.log(`[Newton] Classification: ${result.label} (${result.confidence}%) — ${result.windows} windows`);
+      } else {
+        console.warn('[Newton] No classification result received from SSE');
       }
     } catch (err) {
       console.error('[Newton] Query failed:', err);
@@ -251,6 +254,10 @@ class NewtonStreamManager {
 
       const text = await res.text();
       clearTimeout(timeout);
+
+      // Log raw SSE for debugging
+      const preview = text.substring(0, 500);
+      console.log(`[Newton] SSE response (${text.length} chars): ${preview}${text.length > 500 ? '...' : ''}`);
 
       // Parse SSE events — response format: [label, {label1: score1, label2: score2}]
       let lastResult: StreamResult | null = null;
