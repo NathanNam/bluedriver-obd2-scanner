@@ -9,6 +9,10 @@ import { useBluetoothStore } from '../store/bluetoothStore';
 import { PID_REGISTRY, getAllPIDs } from '../obd2/pids';
 import { useWindowWidth } from '../utils/hooks';
 import { PIDDefinition } from '../types';
+import { useNewtonStatus } from '../hooks/useNewtonStatus';
+import { useNewtonChat } from '../hooks/useNewtonChat';
+import { NewtonIndicator } from '../components/NewtonIndicator';
+import { NewtonChat } from '../components/NewtonChat';
 
 const CHART_H = 80;
 const CHART_VW = 600;
@@ -29,6 +33,14 @@ export function LiveScreen() {
     isRecording, startPolling, stopPolling, startRecording, stopRecording,
     pidStats, refreshRate, activeAlerts,
   } = useLiveStore();
+
+  // Newton AI
+  const newton = useNewtonChat();
+  const newtonStatus = useNewtonStatus({
+    available: newton.available,
+    polling: isPolling,
+    currentValues,
+  });
 
   const [elapsedTime, setElapsedTime] = useState(0);
 
@@ -170,6 +182,7 @@ export function LiveScreen() {
             </span>
           </div>
         )}
+        <NewtonIndicator result={newtonStatus.result} connected={newtonStatus.connected} available={newton.available} />
         <button
           onClick={handleToggleRecording}
           disabled={!isPolling}
@@ -208,7 +221,7 @@ export function LiveScreen() {
       <div style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
         {/* Stacked Time-Series Charts */}
         {activePIDs.length > 0 ? (
-          <div style={{
+          <div id="live-charts" style={{
             display: 'grid',
             gridTemplateColumns: isDesktop ? '1fr 1fr' : '1fr',
             gap: 12,
@@ -268,6 +281,17 @@ export function LiveScreen() {
             })}
           </div>
         )}
+
+        {/* Newton Chat */}
+        <div style={{ marginBottom: 16 }}>
+          <NewtonChat
+            available={newton.available}
+            loading={newton.loading}
+            messages={newton.messages}
+            askNewton={newton.askNewton}
+            hasData={activePIDs.length > 0}
+          />
+        </div>
       </div>
 
       {/* Start/Stop Button */}
