@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export interface NewtonStatusResult {
   label: string;
@@ -20,26 +20,14 @@ export function useNewtonStatus({ available, polling, currentValues }: UseNewton
   const eventSourceRef = useRef<EventSource | null>(null);
   const flushIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startedRef = useRef(false);
+  const currentValuesRef = useRef(currentValues);
 
-  // Send PID data to server every 5 seconds
-  const sendData = useCallback(() => {
-    if (!available || !polling) return;
+  // Keep ref in sync without causing effect re-runs
+  currentValuesRef.current = currentValues;
 
-    const values: Record<string, number> = {};
-    for (const [pid, parsed] of Object.entries(currentValues)) {
-      values[pid] = (parsed as any).value ?? parsed;
-    }
-
-    fetch('/api/newton/stream/data', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ timestamp: Date.now(), values }),
-    }).catch(() => {});
-  }, [available, polling, currentValues]);
-
+  // Manage stream lifecycle based on available + polling
   useEffect(() => {
     if (!available || !polling) {
-      // Stop if was running
       if (startedRef.current) {
         fetch('/api/newton/stream/stop', { method: 'POST' }).catch(() => {});
         startedRef.current = false;
@@ -76,9 +64,23 @@ export function useNewtonStatus({ available, polling, currentValues }: UseNewton
       eventSourceRef.current = es;
     }
 
-    // Flush data every 5 seconds
+    // Flush PID data every 5 seconds using ref (no dependency on currentValues)
     if (!flushIntervalRef.current) {
-      flushIntervalRef.current = setInterval(sendData, 5000);
+      flushIntervalRef.current = setInterval(() => {
+        const vals = currentValuesRef.current;
+        if (!vals || Object.keys(vals).length === 0) return;
+
+        const values: Record<string, number> = {};
+        for (const [pid, parsed] of Object.entries(vals)) {
+          values[pid] = (parsed as any).value ?? parsed;
+        }
+
+        fetch('/api/newton/stream/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ timestamp: Date.now(), values }),
+        }).catch(() => {});
+      }, 5000);
     }
 
     return () => {
@@ -87,7 +89,7 @@ export function useNewtonStatus({ available, polling, currentValues }: UseNewton
         flushIntervalRef.current = null;
       }
     };
-  }, [available, polling, sendData]);
+  }, [available, polling]); // Only re-run when these change, NOT on currentValues
 
   // Cleanup on unmount
   useEffect(() => {
@@ -99,6 +101,10 @@ export function useNewtonStatus({ available, polling, currentValues }: UseNewton
       if (startedRef.current) {
         fetch('/api/newton/stream/stop', { method: 'POST' }).catch(() => {});
         startedRef.current = false;
+      }
+      if (flushIntervalRef.current) {
+        clearInterval(flushIntervalRef.current);
+        flushIntervalRef.current = null;
       }
     };
   }, []);

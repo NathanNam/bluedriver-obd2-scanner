@@ -191,6 +191,10 @@ export const useLiveStore = create<LiveStore>((set, get) => {
     recordings: [],
 
     startPolling: () => {
+      // Reset pollingActive in case it got stuck (e.g., after hot reload)
+      if (pollingActive && !get().isPolling) {
+        pollingActive = false;
+      }
       if (pollingActive) return;
       pollingActive = true;
       cycleCount = 0;
