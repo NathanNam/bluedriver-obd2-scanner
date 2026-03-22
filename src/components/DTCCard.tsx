@@ -33,6 +33,33 @@ const POTENTIAL_CAUSES: Record<string, string[]> = {
   P0442: ['Loose gas cap', 'Small EVAP system leak', 'Cracked charcoal canister'],
   P0455: ['Missing gas cap', 'Disconnected EVAP line', 'Faulty purge valve'],
   P0128: ['Stuck open thermostat', 'Low coolant', 'Faulty ECT sensor'],
+  P0043: ['Faulty O2 sensor heater (B1S3)', 'Blown O2 heater fuse', 'Water in O2 sensor connector', 'Wiring issue'],
+  P0047: ['Boost control solenoid issue', 'Wiring/connector problem', 'ECU fault'],
+  P004A: ['Intermittent boost control circuit', 'Loose wiring', 'ECU fault'],
+};
+
+// Detailed explanations shown in expanded view
+const DETAILED_INFO: Record<string, string> = {
+  P0043: 'The ECM detected low voltage in the heater circuit for the oxygen sensor located after the catalytic converter (Bank 1, Sensor 3). This sensor monitors catalyst efficiency. A common cause is water intrusion into the sensor connector or a blown heater fuse. Not urgent — typically causes no drivability symptoms, but may affect emissions.',
+  P0047: 'The ECM detected a low signal from the boost control solenoid circuit. On turbocharged vehicles, this controls boost pressure. On hybrid or naturally aspirated vehicles, this code number may be repurposed by the manufacturer for a different subsystem.',
+  P004A: 'The ECM detected an intermittent or erratic signal in the boost control circuit. This indicates the signal drops in and out rather than being consistently low or high. Check wiring and connectors for loose or corroded pins.',
+  P0171: 'The engine is running too lean on Bank 1 — more air than fuel in the mixture. The ECM uses long-term fuel trim data to detect this. Common on many vehicles and often caused by a vacuum leak or dirty MAF sensor.',
+  P0172: 'The engine is running too rich on Bank 1 — more fuel than air in the mixture. Can cause poor fuel economy, rough idle, and black exhaust smoke.',
+  P0300: 'Multiple cylinders are misfiring randomly. This is often caused by a system-wide issue rather than a single cylinder problem — vacuum leaks, fuel pressure, or ignition system faults.',
+  P0420: 'The downstream O2 sensor shows the catalytic converter is not cleaning exhaust gases efficiently enough. This may be a failing catalyst, but can also be triggered by O2 sensor issues or exhaust leaks.',
+  P0440: 'A leak has been detected in the evaporative emissions system, which captures fuel vapors from the gas tank. Often caused simply by a loose gas cap.',
+  P0128: 'The engine coolant is not reaching the expected temperature within the expected time. Most commonly caused by a thermostat that is stuck open, allowing coolant to flow to the radiator too soon.',
+};
+
+// Codes that reference systems not present on all vehicles (e.g., turbo codes on NA/hybrid cars)
+const MANUFACTURER_SPECIFIC_HINTS: Record<string, string> = {
+  P0045: 'This code references turbocharger/supercharger systems. On naturally aspirated or hybrid vehicles, Toyota/Lexus may repurpose this code for hybrid system functions such as electric motor boost control, EGR, or intake control.',
+  P0046: 'This code references turbocharger/supercharger systems. On naturally aspirated or hybrid vehicles, Toyota/Lexus may repurpose this code for hybrid system functions such as electric motor boost control, EGR, or intake control.',
+  P0047: 'This code references turbocharger/supercharger systems. On naturally aspirated or hybrid vehicles (e.g., Lexus RX450h, Toyota Highlander Hybrid), Toyota/Lexus repurposes this code for hybrid system functions such as electric motor boost control, EGR valve, or intake manifold runner control. Consult a Toyota/Lexus dealer or Techstream diagnostic tool for the exact meaning.',
+  P0048: 'This code references turbocharger/supercharger systems. On naturally aspirated or hybrid vehicles, Toyota/Lexus may repurpose this code for hybrid system functions such as electric motor boost control, EGR, or intake control.',
+  P004A: 'This code references turbocharger/supercharger systems. On naturally aspirated or hybrid vehicles (e.g., Lexus RX450h, Toyota Highlander Hybrid), Toyota/Lexus repurposes this code for hybrid system functions such as electric motor boost control, EGR valve, or intake manifold runner control. The "intermittent/erratic" qualifier suggests a wiring or connector issue. Consult a Toyota/Lexus dealer or Techstream diagnostic tool for the exact meaning.',
+  P004B: 'This code references turbocharger/supercharger systems. On naturally aspirated or hybrid vehicles, Toyota/Lexus may repurpose this code for hybrid system functions.',
+  P004C: 'This code references turbocharger/supercharger systems. On naturally aspirated or hybrid vehicles, Toyota/Lexus may repurpose this code for hybrid system functions.',
 };
 
 export function DTCCard({ dtc }: Props) {
@@ -40,6 +67,7 @@ export function DTCCard({ dtc }: Props) {
   const theme = useThemeColors();
   const severityColor = SEVERITY_COLORS[dtc.severity] ?? SEVERITY_COLORS.info;
   const causes = POTENTIAL_CAUSES[dtc.code] ?? [];
+  const mfgHint = MANUFACTURER_SPECIFIC_HINTS[dtc.code];
 
   return (
     <div
@@ -50,7 +78,7 @@ export function DTCCard({ dtc }: Props) {
         padding: 12,
         marginBottom: 8,
         backgroundColor: theme.surface,
-        cursor: causes.length > 0 ? 'pointer' : 'default',
+        cursor: (causes.length > 0 || mfgHint || DETAILED_INFO[dtc.code]) ? 'pointer' : 'default',
         userSelect: 'none',
       }}
     >
@@ -99,6 +127,17 @@ export function DTCCard({ dtc }: Props) {
         {dtc.description}
       </span>
 
+      {/* Detailed explanation */}
+      {expanded && DETAILED_INFO[dtc.code] && (
+        <div style={{
+          marginTop: 8, padding: '8px 10px',
+          backgroundColor: theme.surfaceSecondary, borderRadius: 6,
+          fontSize: 13, lineHeight: '20px', color: theme.text,
+        }}>
+          {DETAILED_INFO[dtc.code]}
+        </div>
+      )}
+
       {/* Expanded causes */}
       {expanded && causes.length > 0 && (
         <div
@@ -136,8 +175,25 @@ export function DTCCard({ dtc }: Props) {
         </div>
       )}
 
+      {/* Manufacturer-specific hint */}
+      {expanded && mfgHint && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: '8px 10px',
+            backgroundColor: theme.info + '15',
+            borderRadius: 6,
+            borderLeft: `3px solid ${theme.info}`,
+          }}
+        >
+          <span style={{ fontSize: 12, color: theme.text, lineHeight: '18px' }}>
+            {mfgHint}
+          </span>
+        </div>
+      )}
+
       {/* Expand hint */}
-      {causes.length > 0 && (
+      {(causes.length > 0 || mfgHint) && (
         <span
           style={{
             fontSize: 11,

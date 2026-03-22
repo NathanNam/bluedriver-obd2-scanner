@@ -56,6 +56,13 @@ export interface FreezeFrame {
   timingAdvance: number | null;
 }
 
+export interface RawLogEntry {
+  command: string;
+  description: string;
+  rawResponse: string;
+  parsedSummary: string;
+}
+
 export interface ScanResult {
   id: string;
   timestamp: number;
@@ -68,6 +75,7 @@ export interface ScanResult {
   pendingDTCs: DTC[];
   permanentDTCs: DTC[];
   freezeFrame: FreezeFrame | null;
+  rawLog: RawLogEntry[];
 }
 
 // --- Live Scan ---

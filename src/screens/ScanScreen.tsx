@@ -2,12 +2,12 @@
 // ScanScreen — one-time diagnostic scan results
 // ============================================================
 
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import { useThemeColors } from '../utils/hooks';
 import { useScanStore } from '../store/scanStore';
 import { DTCCard } from '../components/DTCCard';
 import { StatusBadge } from '../components/StatusBadge';
-import { DTC, FreezeFrame } from '../types';
+import { DTC, FreezeFrame, RawLogEntry } from '../types';
 
 interface Props {
   onNavigate: (screen: string, params?: any) => void;
@@ -331,6 +331,9 @@ export function ScanScreen({ onNavigate }: Props) {
       {/* Freeze Frame */}
       {r.freezeFrame && <FreezeFrameTable frame={r.freezeFrame} theme={theme} />}
 
+      {/* Raw Data Log (collapsible) */}
+      {r.rawLog && r.rawLog.length > 0 && <RawDataLog entries={r.rawLog} theme={theme} />}
+
       {/* Action Buttons */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 20 }}>
         {totalDTCs > 0 && (
@@ -389,6 +392,73 @@ export function ScanScreen({ onNavigate }: Props) {
 }
 
 // --- Freeze Frame Table Sub-component ---
+
+function RawDataLog({ entries, theme }: { entries: RawLogEntry[]; theme: any }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div
+      style={{
+        backgroundColor: theme.surface,
+        border: `1px solid ${theme.border}`,
+        borderRadius: 14,
+        padding: 16,
+        marginBottom: 16,
+      }}
+    >
+      <button
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          width: '100%',
+          padding: 0,
+          background: 'none',
+          cursor: 'pointer',
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.5, color: theme.textSecondary, textTransform: 'uppercase' as const }}>
+            Raw Scan Data
+          </div>
+          <div style={{ fontSize: 11, color: theme.textTertiary, marginTop: 2, textAlign: 'left' as const }}>
+            {entries.length} commands sent — {expanded ? 'click to collapse' : 'click to expand'}
+          </div>
+        </div>
+        <span style={{ fontSize: 16, color: theme.textTertiary }}>{expanded ? '▲' : '▼'}</span>
+      </button>
+      {expanded && (
+        <div style={{ marginTop: 12 }}>
+          {entries.map((entry, i) => (
+            <div
+              key={i}
+              style={{
+                padding: '10px 0',
+                borderTop: i > 0 ? `1px solid ${theme.border}` : 'none',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: theme.text }}>{entry.description}</span>
+                <code style={{ fontSize: 11, color: theme.primary, fontFamily: 'monospace' }}>{entry.command}</code>
+              </div>
+              <div style={{
+                fontSize: 11, fontFamily: 'monospace', color: theme.textSecondary,
+                backgroundColor: theme.surfaceSecondary, padding: '6px 8px', borderRadius: 6,
+                overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+              }}>
+                {entry.rawResponse}
+              </div>
+              <div style={{ fontSize: 11, color: theme.textTertiary, marginTop: 4 }}>
+                Parsed: {entry.parsedSummary}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function FreezeFrameTable({ frame, theme }: { frame: FreezeFrame; theme: any }) {
   const rows = [
