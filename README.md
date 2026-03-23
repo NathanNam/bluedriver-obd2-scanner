@@ -127,6 +127,9 @@ app/
     ├── status/             # Check if API key configured
     ├── query/              # Chat: screenshot → video → analysis
     └── stream/             # Health indicator: CSV data → classification
+data/
+├── focus-normal.csv        # N-shot: real normal driving data (KIT Dataset, CC BY 4.0)
+└── focus-attention.csv     # N-shot: real congested traffic data (KIT Dataset, CC BY 4.0)
 src/
 ├── bluetooth/              # Web Bluetooth manager + demo simulator
 ├── obd2/                   # ELM327 commands, PID registry, response parser
@@ -181,7 +184,7 @@ Two independent Archetype AI lenses:
 - **BlueDriver Pro not supported**: Uses a proprietary BLE protocol that doesn't respond to standard ELM327 commands. Requires a generic ELM327 BLE adapter (e.g., Veepeak BLE+).
 - **Web Bluetooth only in Chromium**: Safari and Firefox don't support the Web Bluetooth API. The app works in demo mode but cannot connect to real adapters in these browsers.
 - **HTTPS required for remote access**: Web Bluetooth requires a secure context. Works on localhost for development; needs HTTPS for deployment.
-- **Newton AI n-shot tuning**: The Machine State Lens classification uses synthetic training examples. Real-world accuracy improves with better n-shot CSVs matching actual vehicle data patterns.
+- **Newton AI n-shot tuning**: The Machine State Lens uses real OBD2 data from the [KIT Automotive OBD-II Dataset](https://radar.kit.edu/radar/en/dataset/bCtGxdTklQlfQcAq) (CC BY 4.0) for n-shot classification. Normal vs attention accuracy could improve with more diverse vehicle data across makes, models, and fault conditions.
 - **Freeze frame data**: Some vehicles (particularly hybrids) don't provide freeze frame data via standard OBD2 Mode 02 commands.
 - **Hybrid-specific PIDs**: Toyota/Lexus hybrid battery and electric motor data requires manufacturer-specific Mode 22 PIDs not yet implemented.
 - **ffmpeg required for Newton Chat**: The Activity Monitor Lens requires video input. The server converts screenshots to MP4 via ffmpeg, which must be installed on the host machine.
@@ -189,7 +192,7 @@ Two independent Archetype AI lenses:
 ## Future Improvements
 
 - **Toyota/Lexus hybrid PIDs**: Add Mode 22 manufacturer-specific PIDs for hybrid battery state of charge, cell voltages, electric motor stats
-- **Better Newton n-shot examples**: Train with real-world OBD2 data from various vehicles and conditions for more accurate health classification
+- **Expand Newton training data**: Add more vehicle makes/models and real fault condition data to the n-shot examples for better classification accuracy
 - **Persistent storage**: Save scan history, recordings, and settings to localStorage/IndexedDB
 - **URL-based routing**: Replace the client-side tab navigation with Next.js file-system routing for shareable URLs
 - **Multi-vehicle support**: Save and switch between multiple vehicle profiles
