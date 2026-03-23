@@ -283,9 +283,9 @@ class NewtonStreamManager {
   }
 
   private async uploadExamples() {
-    console.log('[Newton] Uploading n-shot CSVs...');
-    this.normalFileId = await this.uploadFile('focus-normal.csv', generateNormalCSV(), 'text/csv');
-    this.attentionFileId = await this.uploadFile('focus-attention.csv', generateAttentionCSV(), 'text/csv');
+    console.log('[Newton] Uploading n-shot CSVs (KIT Automotive Dataset)...');
+    this.normalFileId = await this.uploadFile('focus-normal.csv', loadFocusCSV('focus-normal.csv'), 'text/csv');
+    this.attentionFileId = await this.uploadFile('focus-attention.csv', loadFocusCSV('focus-attention.csv'), 'text/csv');
     console.log(`[Newton] Focus files: normal=${this.normalFileId}, attention=${this.attentionFileId}`);
   }
 
@@ -322,22 +322,25 @@ class NewtonStreamManager {
   }
 }
 
-function generateNormalCSV(): string {
-  const cols = ['timestamp', ...DATA_COLUMNS].join(',');
-  const rows = [cols];
-  for (let i = 0; i < 100; i++) {
-    const t = (i * 0.5).toFixed(3);
-    rows.push(`${t},${(800 + Math.sin(i/10)*200 + Math.random()*100).toFixed(1)},${(60 + Math.sin(i/15)*20 + Math.random()*5).toFixed(1)},${(88 + Math.sin(i/30)*3 + Math.random()).toFixed(1)},${(35 + Math.random()*3).toFixed(1)},${(25 + Math.sin(i/10)*10 + Math.random()*5).toFixed(1)},${(20 + Math.sin(i/10)*8 + Math.random()*3).toFixed(1)},${(95 + Math.sin(i/20)*5 + Math.random()*2).toFixed(1)},${(65 - i*0.01).toFixed(1)},${(Math.random()*4-2).toFixed(1)},${(Math.random()*2-1).toFixed(1)},${(8 + Math.sin(i/10)*3 + Math.random()).toFixed(1)}`);
+// Load real OBD2 data from KIT Automotive Dataset (CC BY 4.0)
+// Source: https://radar.kit.edu/radar/en/dataset/bCtGxdTklQlfQcAq
+function loadFocusCSV(filename: string): string {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const filePath = path.join(process.cwd(), 'data', filename);
+    return fs.readFileSync(filePath, 'utf8');
+  } catch (err) {
+    console.warn(`[Newton] Could not load ${filename}, using fallback`);
+    return generateFallbackCSV();
   }
-  return rows.join('\n');
 }
 
-function generateAttentionCSV(): string {
+function generateFallbackCSV(): string {
   const cols = ['timestamp', ...DATA_COLUMNS].join(',');
   const rows = [cols];
   for (let i = 0; i < 100; i++) {
-    const t = (i * 0.5).toFixed(3);
-    rows.push(`${t},${(600 + Math.random()*800 + (Math.random()>0.8?1500:0)).toFixed(1)},${(40 + Math.random()*30).toFixed(1)},${(105 + i*0.15 + Math.random()*3).toFixed(1)},${(45 + Math.random()*10).toFixed(1)},${(50 + Math.random()*40).toFixed(1)},${(30 + Math.random()*30).toFixed(1)},${(80 + Math.random()*30).toFixed(1)},${(15 - i*0.1).toFixed(1)},${(15 + Math.random()*10).toFixed(1)},${(12 + Math.random()*8).toFixed(1)},${(3 + Math.random()*5).toFixed(1)}`);
+    rows.push(`${(i*0.5).toFixed(3)},${(800+Math.random()*200).toFixed(1)},${(50+Math.random()*30).toFixed(1)},${(85+Math.random()*5).toFixed(1)},${(35+Math.random()*3).toFixed(1)},${(25+Math.random()*10).toFixed(1)},${(20+Math.random()*10).toFixed(1)},${(95+Math.random()*5).toFixed(1)},50.0,0.0,0.0,${(8+Math.random()*3).toFixed(1)}`);
   }
   return rows.join('\n');
 }
