@@ -45,10 +45,20 @@ class NewtonStreamManager {
   private listeners: ResultListener[] = [];
   private _latestResult: StreamResult | null = null;
   private _isRunning = false;
+  private _vehicleContext = '';
 
   get isRunning() { return this._isRunning; }
   get latestResult() { return this._latestResult; }
   get bufferSize() { return this.dataBuffer.length; }
+
+  setVehicleContext(ctx: string) {
+    this._vehicleContext = ctx;
+    // If session exists, recreate it with new context on next query
+    if (this.sessionId) {
+      this.deleteSession(this.sessionId).catch(() => {});
+      this.sessionId = null;
+    }
+  }
 
   addListener(fn: ResultListener) {
     this.listeners.push(fn);
@@ -186,7 +196,7 @@ class NewtonStreamManager {
         event: {
           type: 'session.modify',
           event_data: {
-            focus: 'Classify vehicle health from OBD2 sensor data. "normal" means all readings within expected ranges for the current operating state. "attention" means one or more sensors show genuinely concerning values like overheating coolant (>105°C), extreme fuel trims (>±20%), or erratic RPM at idle. Important context: hybrid vehicles (e.g., Toyota/Lexus hybrids) normally show RPM=0 and MAP=100kPa when the gas engine is off and the electric motor is driving — this is normal, not a fault. A stationary or idling vehicle with RPM=0, speed=0, and stable coolant temperature is normal. Only classify as "attention" when values indicate an actual mechanical or electrical problem.',
+            focus: `Classify vehicle health from OBD2 sensor data. "normal" means all readings within expected ranges. "attention" means genuinely concerning values like overheating coolant (>105°C), extreme fuel trims (>±20%), or erratic RPM. A stationary/idling vehicle with stable readings is normal.${this._vehicleContext ? ' ' + this._vehicleContext : ''}`,
             input_n_shot: { normal: this.normalFileId, attention: this.attentionFileId },
             csv_configs: {
               timestamp_column: 'timestamp',

@@ -17,7 +17,7 @@ export function useNewtonChat() {
       .catch(() => setAvailable(false));
   }, []);
 
-  const askNewton = useCallback(async (question: string, chartImage: string | null) => {
+  const askNewton = useCallback(async (question: string, chartImage: string | null, vehicleContext?: string) => {
     setMessages((prev) => [...prev, { role: 'user', text: question }]);
     setLoading(true);
 
@@ -25,7 +25,7 @@ export function useNewtonChat() {
       const res = await fetch('/api/newton/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, chartImage: chartImage ?? '' }),
+        body: JSON.stringify({ question, chartImage: chartImage ?? '', vehicleContext: vehicleContext ?? '' }),
       });
       const data = await res.json();
 

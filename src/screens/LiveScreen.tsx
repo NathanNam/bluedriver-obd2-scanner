@@ -11,8 +11,10 @@ import { useWindowWidth } from '../utils/hooks';
 import { PIDDefinition } from '../types';
 import { useNewtonStatus } from '../hooks/useNewtonStatus';
 import { useNewtonChat } from '../hooks/useNewtonChat';
+import { useVehicleInfo } from '../hooks/useVehicleInfo';
 import { NewtonIndicator } from '../components/NewtonIndicator';
 import { NewtonChat } from '../components/NewtonChat';
+import { useScanStore } from '../store/scanStore';
 
 const CHART_H = 80;
 const CHART_VW = 600;
@@ -34,6 +36,15 @@ export function LiveScreen() {
     pidStats, refreshRate, activeAlerts,
   } = useLiveStore();
 
+  // Vehicle info from VIN (decoded via NHTSA API)
+  const lastScanVin = useScanStore((s) => s.currentResult?.vin ?? s.scanHistory[0]?.vin ?? null);
+  const { info: vehicleInfo } = useVehicleInfo(lastScanVin);
+
+  // Build dynamic vehicle context for Newton
+  const vehicleContext = vehicleInfo
+    ? `This is a ${vehicleInfo.displayName}. ${vehicleInfo.isHybrid ? 'This is a HYBRID vehicle — RPM=0 and MAP=100kPa are NORMAL when the gas engine is off and the electric motor is running. The gas engine cycles on/off during normal hybrid operation.' : ''} ${vehicleInfo.isElectric ? 'This is an ELECTRIC vehicle — there is no combustion engine. RPM=0 is always expected.' : ''} Fuel type: ${vehicleInfo.fuelTypePrimary ?? 'unknown'}${vehicleInfo.fuelTypeSecondary ? ' + ' + vehicleInfo.fuelTypeSecondary : ''}. Engine: ${vehicleInfo.displacementL ? vehicleInfo.displacementL + 'L ' : ''}${vehicleInfo.engineConfig ?? ''} ${vehicleInfo.engineCylinders ? vehicleInfo.engineCylinders + ' cylinders' : ''}. Drive: ${vehicleInfo.driveType ?? 'unknown'}.`
+    : '';
+
   // Newton AI
   const newton = useNewtonChat();
   const newtonStatus = useNewtonStatus({
@@ -42,6 +53,7 @@ export function LiveScreen() {
     currentValues,
     pidStats,
     activeAlerts,
+    vehicleContext,
   });
 
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -246,6 +258,7 @@ export function LiveScreen() {
             messages={newton.messages}
             askNewton={newton.askNewton}
             hasData={activePIDs.length > 0}
+            vehicleContext={vehicleContext}
           />
         </div>
 

@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Newton AI not configured' }, { status: 503 });
   }
 
-  const { question, chartImage } = await req.json();
+  const { question, chartImage, vehicleContext } = await req.json();
   if (!question || !chartImage) {
     return NextResponse.json({ error: 'Missing question or chartImage' }, { status: 400 });
   }
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
       event: {
         type: 'session.modify',
         event_data: {
-          focus: FOCUS_TEXT,
+          focus: FOCUS_TEXT + (vehicleContext ? '\n\nVehicle-specific context: ' + vehicleContext : ''),
           instruction: question,
         },
       },

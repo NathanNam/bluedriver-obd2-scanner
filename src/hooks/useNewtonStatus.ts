@@ -23,6 +23,7 @@ interface UseNewtonStatusOptions {
   currentValues: Record<string, ParsedPID>;
   pidStats: Record<string, PIDStats>;
   activeAlerts: Record<string, any>;
+  vehicleContext?: string;
 }
 
 /**
@@ -30,7 +31,7 @@ interface UseNewtonStatusOptions {
  * - healthResult: instant local threshold analysis (always available)
  * - newtonResult: real Newton AI Machine State Lens classification (when API key set)
  */
-export function useNewtonStatus({ available, polling, currentValues, pidStats, activeAlerts }: UseNewtonStatusOptions) {
+export function useNewtonStatus({ available, polling, currentValues, pidStats, activeAlerts, vehicleContext }: UseNewtonStatusOptions) {
   const [healthResult, setHealthResult] = useState<HealthResult | null>(null);
   const [newtonResult, setNewtonResult] = useState<NewtonAIResult | null>(null);
   const [newtonConnected, setNewtonConnected] = useState(false);
@@ -107,6 +108,13 @@ export function useNewtonStatus({ available, polling, currentValues, pidStats, a
 
     if (!startedRef.current) {
       fetch('/api/newton/stream/start', { method: 'POST' }).catch(() => {});
+      if (vehicleContext) {
+        fetch('/api/newton/vehicle-context', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ context: vehicleContext }),
+        }).catch(() => {});
+      }
       startedRef.current = true;
     }
 

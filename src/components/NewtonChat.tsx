@@ -7,8 +7,9 @@ interface Props {
   available: boolean;
   loading: boolean;
   messages: ChatMessage[];
-  askNewton: (question: string, chartImage: string | null) => void;
+  askNewton: (question: string, chartImage: string | null, vehicleContext?: string) => void;
   hasData: boolean;
+  vehicleContext?: string;
 }
 
 const SUGGESTED_QUESTIONS = [
@@ -18,7 +19,7 @@ const SUGGESTED_QUESTIONS = [
   'What do the DTCs mean?',
 ];
 
-export function NewtonChat({ available, loading, messages, askNewton, hasData }: Props) {
+export function NewtonChat({ available, loading, messages, askNewton, hasData, vehicleContext }: Props) {
   const theme = useThemeColors();
   const [input, setInput] = useState('');
   const [collapsed, setCollapsed] = useState(false);
@@ -36,7 +37,7 @@ export function NewtonChat({ available, loading, messages, askNewton, hasData }:
     setInput('');
 
     const chartImage = await captureLiveCharts();
-    askNewton(q, chartImage);
+    askNewton(q, chartImage, vehicleContext);
   };
 
   // Markdown renderer: headings, bold, italic, inline code, lists

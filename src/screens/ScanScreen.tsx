@@ -26,6 +26,7 @@ export function ScanScreen({ onNavigate }: Props) {
     startScan,
     clearCodes,
   } = useScanStore();
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   useEffect(() => {
     if (!currentResult && !isScanning) {
@@ -386,37 +387,45 @@ export function ScanScreen({ onNavigate }: Props) {
             Clear Codes
           </button>
         )}
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ position: 'relative' }}>
           <button
-            onClick={handleExportMarkdown}
+            onClick={() => setShowExportMenu(!showExportMenu)}
             style={{
-              flex: 1, padding: '14px 0', fontSize: 14, fontWeight: 600,
+              width: '100%', padding: '14px 0', fontSize: 16, fontWeight: 600,
               color: '#FFF', backgroundColor: theme.primary,
               border: 'none', borderRadius: 10, cursor: 'pointer',
             }}
           >
-            Markdown
+            Export Report
           </button>
-          <button
-            onClick={handleExportPNG}
-            style={{
-              flex: 1, padding: '14px 0', fontSize: 14, fontWeight: 600,
-              color: '#FFF', backgroundColor: theme.primary,
-              border: 'none', borderRadius: 10, cursor: 'pointer',
-            }}
-          >
-            PNG
-          </button>
-          <button
-            onClick={handleExportPDF}
-            style={{
-              flex: 1, padding: '14px 0', fontSize: 14, fontWeight: 600,
-              color: '#FFF', backgroundColor: theme.primary,
-              border: 'none', borderRadius: 10, cursor: 'pointer',
-            }}
-          >
-            PDF
-          </button>
+          {showExportMenu && (
+            <div style={{
+              position: 'absolute', bottom: '100%', left: 0, right: 0, marginBottom: 8,
+              backgroundColor: theme.surface, border: `1px solid ${theme.border}`,
+              borderRadius: 10, overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            }}>
+              {[
+                { label: 'Markdown (.md)', onClick: handleExportMarkdown },
+                { label: 'Screenshot (PNG)', onClick: handleExportPNG },
+                { label: 'Document (PDF)', onClick: handleExportPDF },
+              ].map((opt) => (
+                <button
+                  key={opt.label}
+                  onClick={() => { opt.onClick(); setShowExportMenu(false); }}
+                  style={{
+                    width: '100%', padding: '12px 16px', fontSize: 14,
+                    color: theme.text, textAlign: 'left',
+                    borderBottom: `1px solid ${theme.border}`,
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = theme.surfaceSecondary)}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <button
           onClick={startScan}
