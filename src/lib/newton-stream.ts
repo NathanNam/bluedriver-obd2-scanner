@@ -244,15 +244,16 @@ class NewtonStreamManager {
                 console.log(`[Newton] Window ${windowCount}: label="${rawLabel}" scores=${JSON.stringify(rawScores)}`);
 
                 // Normalize scores to percentages
+                // Scores are vote counts (e.g., {attention:5, normal:0}) — normalize by sum
                 const normalizedScores: Record<string, number> = {};
-                const maxRawValue = Math.max(...Object.values(rawScores));
-                const isAlreadyPercent = maxRawValue > 1;
+                const values = Object.values(rawScores);
+                const sum = values.reduce((a, b) => a + b, 0);
 
                 let maxPct = 0;
                 let maxLabel = rawLabel;
 
                 for (const [k, v] of Object.entries(rawScores)) {
-                  const pct = isAlreadyPercent ? Math.round(v) : Math.round(v * 100);
+                  const pct = sum > 0 ? Math.round((v / sum) * 100) : 0;
                   normalizedScores[k] = pct;
                   if (pct > maxPct) { maxPct = pct; maxLabel = k; }
                 }
