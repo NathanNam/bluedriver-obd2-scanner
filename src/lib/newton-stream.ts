@@ -186,7 +186,7 @@ class NewtonStreamManager {
         event: {
           type: 'session.modify',
           event_data: {
-            focus: 'Classify vehicle health from OBD2 sensor data. "normal" means all readings within expected ranges. "attention" means concerning values.',
+            focus: 'Classify vehicle health from OBD2 sensor data. "normal" means all readings within expected ranges for the current operating state. "attention" means one or more sensors show genuinely concerning values like overheating coolant (>105°C), extreme fuel trims (>±20%), or erratic RPM at idle. Important context: hybrid vehicles (e.g., Toyota/Lexus hybrids) normally show RPM=0 and MAP=100kPa when the gas engine is off and the electric motor is driving — this is normal, not a fault. A stationary or idling vehicle with RPM=0, speed=0, and stable coolant temperature is normal. Only classify as "attention" when values indicate an actual mechanical or electrical problem.',
             input_n_shot: { normal: this.normalFileId, attention: this.attentionFileId },
             csv_configs: {
               timestamp_column: 'timestamp',

@@ -17,7 +17,12 @@ Each chart shows a 60-second rolling window with colored data lines and current 
 Dashed yellow lines indicate caution thresholds, dashed red lines indicate critical thresholds.
 Below the charts is a numerical data table showing current, min, max, and average values.
 Red highlighted rows indicate values that have crossed critical thresholds.
-A "Newton" indicator in the header shows the AI's real-time health classification of the vehicle.`;
+Important context for hybrid vehicles (Toyota/Lexus hybrids like the RX450h):
+- RPM = 0 with Speed = 0 is NORMAL when the gas engine is off and the car is using its electric motor or is parked.
+- MAP = 100 kPa at RPM 0 is NORMAL — it reads atmospheric pressure when the gas engine is not generating intake vacuum.
+- The gas engine cycles on and off during normal hybrid operation, so RPM alternating between 0 and 800-1200 is expected behavior, not a fault.
+- Coolant temperature of 70-90°C with RPM 0 simply means the engine recently ran and is cooling — this is normal.
+Do not flag these hybrid-normal conditions as problems.`;
 
 async function pngToVideo(pngBase64: string): Promise<string> {
   const id = randomUUID();
