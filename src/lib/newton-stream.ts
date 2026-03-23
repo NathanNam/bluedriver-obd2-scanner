@@ -51,6 +51,11 @@ class NewtonStreamManager {
   get latestResult() { return this._latestResult; }
   get bufferSize() { return this.dataBuffer.length; }
 
+  exportBufferAsCSV(): string | null {
+    if (this.dataBuffer.length === 0) return null;
+    return this.buildCSV();
+  }
+
   setVehicleContext(ctx: string) {
     this._vehicleContext = ctx;
     // If session exists, recreate it with new context on next query
