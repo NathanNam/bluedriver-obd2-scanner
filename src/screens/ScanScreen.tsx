@@ -27,6 +27,8 @@ export function ScanScreen({ onNavigate }: Props) {
     clearCodes,
   } = useScanStore();
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearConfirmText, setClearConfirmText] = useState('');
 
   useEffect(() => {
     if (!currentResult && !isScanning) {
@@ -35,12 +37,8 @@ export function ScanScreen({ onNavigate }: Props) {
   }, []);
 
   const handleClearCodes = useCallback(async () => {
-    const ok = window.confirm(
-      'Clear all stored DTCs and turn off the Check Engine light?\n\n' +
-        'Warning: Clearing codes does not fix the underlying problem. ' +
-        'If the issue persists, the codes will return.'
-    );
-    if (!ok) return;
+    setShowClearConfirm(false);
+    setClearConfirmText('');
     const success = await clearCodes();
     if (success) {
       window.alert('Codes cleared. Re-scanning to verify...');
@@ -371,7 +369,7 @@ export function ScanScreen({ onNavigate }: Props) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 20 }}>
         {totalDTCs > 0 && (
           <button
-            onClick={handleClearCodes}
+            onClick={() => { setShowClearConfirm(true); setClearConfirmText(''); }}
             style={{
               width: '100%',
               padding: '14px 0',
@@ -444,6 +442,77 @@ export function ScanScreen({ onNavigate }: Props) {
           Scan Again
         </button>
       </div>
+
+      {/* Clear Codes Confirmation Modal */}
+      {showClearConfirm && (
+        <div
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000,
+            backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowClearConfirm(false); }}
+        >
+          <div style={{
+            width: '100%', maxWidth: 420, backgroundColor: theme.surface,
+            borderRadius: 16, padding: 24, margin: 16,
+          }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: theme.critical, marginBottom: 12 }}>
+              Clear All Fault Codes?
+            </div>
+            <div style={{ fontSize: 14, color: theme.text, lineHeight: '22px', marginBottom: 8 }}>
+              This will clear all stored, pending, and permanent DTCs and turn off the Check Engine light.
+            </div>
+            <div style={{
+              fontSize: 13, color: theme.warning, lineHeight: '20px',
+              padding: '10px 12px', backgroundColor: theme.warning + '15',
+              borderRadius: 8, marginBottom: 16,
+            }}>
+              Warning: Clearing codes does not fix the underlying problem. If the issue persists, the codes will return. This action cannot be undone.
+            </div>
+            <div style={{ fontSize: 13, color: theme.textSecondary, marginBottom: 8 }}>
+              Type <strong>CLEAR</strong> to confirm:
+            </div>
+            <input
+              value={clearConfirmText}
+              onChange={(e) => setClearConfirmText(e.target.value)}
+              placeholder="Type CLEAR"
+              autoFocus
+              style={{
+                width: '100%', padding: '10px 12px', fontSize: 15, fontFamily: 'monospace',
+                border: `1px solid ${theme.border}`, borderRadius: 8,
+                backgroundColor: theme.background, color: theme.text,
+                outline: 'none', marginBottom: 16, boxSizing: 'border-box',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                style={{
+                  flex: 1, padding: '12px 0', fontSize: 15, fontWeight: 600,
+                  color: theme.text, backgroundColor: theme.surfaceSecondary,
+                  border: `1px solid ${theme.border}`, borderRadius: 10, cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleClearCodes}
+                disabled={clearConfirmText !== 'CLEAR'}
+                style={{
+                  flex: 1, padding: '12px 0', fontSize: 15, fontWeight: 600,
+                  color: '#FFF', backgroundColor: theme.critical,
+                  border: 'none', borderRadius: 10,
+                  cursor: clearConfirmText === 'CLEAR' ? 'pointer' : 'not-allowed',
+                  opacity: clearConfirmText === 'CLEAR' ? 1 : 0.4,
+                }}
+              >
+                Clear Codes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

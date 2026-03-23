@@ -19,8 +19,9 @@ A web app that connects to your vehicle's OBD2 port via an ELM327 Bluetooth adap
 - Manufacturer-specific code hints (e.g., Toyota/Lexus hybrid-repurposed codes)
 - Freeze frame data captured at time of fault
 - Collapsible raw scan data log showing every OBD2 command and response
-- Clear fault codes (with confirmation and re-scan)
-- Export scan reports via share or clipboard
+- Clear fault codes (requires typing "CLEAR" to confirm — prevents accidental clearing)
+- Export scan reports as Markdown, PNG screenshot, or PDF document
+- VIN decoding via NHTSA API — automatically identifies vehicle make, model, year, and hybrid/electric status
 
 **Live Scan**
 - Real-time streaming of 13 PIDs: RPM, speed, coolant temp, throttle, engine load, IAT, MAP, timing advance, fuel level, oil temp, STFT, LTFT, MAF
